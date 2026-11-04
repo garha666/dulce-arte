@@ -1,0 +1,18 @@
+[Unit]
+Description=Gunicorn daemon for Dulce Arte (Django)
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/apps/dulce-arte
+EnvironmentFile=/home/ubuntu/apps/dulce-arte/.env
+ExecStart=/home/ubuntu/apps/dulce-arte/env/bin/gunicorn \
+    --workers 3 \
+    --bind unix:/home/ubuntu/apps/dulce-arte/dulcearte.sock \
+    drf.wsgi:application
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

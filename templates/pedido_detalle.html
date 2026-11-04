@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Pedido {{ pedido.codigo }}{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Pedido {{ pedido.codigo }}</h1>
+        <p>{{ pedido.cliente.nombre }} · entrega {{ pedido.fecha_entrega|date:"d/m/Y H:i" }}</p>
+    </div>
+    <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <h2>Detalle</h2>
+        <table class="table">
+            <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Subtotal</th></tr></thead>
+            <tbody>
+            {% for detalle in pedido.detalles.all %}
+                <tr>
+                    <td>{{ detalle.producto.nombre }}
+                        {% if detalle.personalizacion %}<br><small class="muted">{{ detalle.personalizacion }}</small>{% endif %}
+                    </td>
+                    <td>{{ detalle.cantidad }}</td>
+                    <td>${{ detalle.precio_unitario|floatformat:0 }}</td>
+                    <td>${{ detalle.subtotal|floatformat:0 }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        <dl class="totales">
+            <dt>Total</dt><dd>${{ pedido.total|floatformat:0 }}</dd>
+            <dt>Anticipo</dt><dd>${{ pedido.anticipo|floatformat:0 }}</dd>
+            <dt>Saldo</dt><dd>${{ pedido.saldo|floatformat:0 }}</dd>
+        </dl>
+
+        {% if pedido.descripcion_diseno %}
+            <h2 class="mt">Diseño</h2>
+            <p>{{ pedido.descripcion_diseno|linebreaks }}</p>
+        {% endif %}
+        {% if pedido.imagen_referencia %}
+            <p><a href="{{ pedido.imagen_referencia.url }}" target="_blank">Ver imagen de referencia</a></p>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <h2>Trazabilidad</h2>
+        <ul class="timeline">
+        {% for evento in pedido.historial.all %}
+            <li>
+                <strong>{{ evento.get_estado_nuevo_display }}</strong>
+                <span class="muted">{{ evento.fecha|date:"d/m/Y H:i" }}
+                    {% if evento.usuario %}· {{ evento.usuario.username }}{% endif %}</span>
+                {% if evento.comentario %}<p>{{ evento.comentario }}</p>{% endif %}
+            </li>
+        {% empty %}
+            <li class="muted">Sin movimientos registrados.</li>
+        {% endfor %}
+        </ul>
+
+        <h2 class="mt">Insumos</h2>
+        <p class="muted">
+            {% if pedido.insumos_descontados %}
+                Los insumos del pedido ya fueron descontados del inventario.
+            {% else %}
+                Aún no se descuentan (se hace al pasar a “En preparación”).
+            {% endif %}
+        </p>
+    </div>
+</section>
+{% endblock %}

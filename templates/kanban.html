@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Tablero de cocina{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Tablero Kanban</h1>
+        <p>Avanza cada pedido por el flujo de producción. Al pasar a <em>En preparación</em> se descuentan los insumos del BOM.</p>
+    </div>
+</section>
+
+<div class="kanban">
+    {% for columna in columnas %}
+    <section class="kanban-col">
+        <header>
+            <h2>{{ columna.etiqueta }}</h2>
+            <span class="chip">{{ columna.pedidos|length }}</span>
+        </header>
+
+        {% for pedido in columna.pedidos %}
+        <article class="kanban-card" id="pedido-{{ pedido.pk }}">
+            <div class="kanban-head">
+                <a href="{% url 'pedido_detalle' pedido.pk %}"><strong>{{ pedido.codigo }}</strong></a>
+                <span class="muted">{{ pedido.fecha_entrega|date:"d/m H:i" }}</span>
+            </div>
+            <p class="kanban-cliente">{{ pedido.cliente.nombre }}</p>
+            {% if pedido.descripcion_diseno %}
+                <p class="kanban-desc">{{ pedido.descripcion_diseno|truncatechars:70 }}</p>
+            {% endif %}
+            <p class="kanban-total">${{ pedido.total|floatformat:0 }}</p>
+
+            <div class="kanban-actions">
+                {% for clave, etiqueta in pedido.transiciones_disponibles %}
+                    <button class="btn btn-mini {% if clave == 'cancelado' %}btn-danger{% else %}btn-solid{% endif %}"
+                            data-cambiar="{{ pedido.pk }}"
+                            data-estado="{{ clave }}">
+                        {{ etiqueta }}
+                    </button>
+                {% endfor %}
+            </div>
+        </article>
+        {% empty %}
+            <p class="muted center">Sin pedidos</p>
+        {% endfor %}
+    </section>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/kanban.js' %}"></script>
+{% endblock %}

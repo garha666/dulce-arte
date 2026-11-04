@@ -1,0 +1,17 @@
+services:
+  db:
+    image: postgres:16
+    container_name: dulcearte-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: dulcearte
+      POSTGRES_USER: dulcearte
+      POSTGRES_PASSWORD: dulcearte2026
+    ports:
+      # 5433 en el host porque el puerto 5432 está ocupado por otro PostgreSQL local
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

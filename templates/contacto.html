@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Contacto{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Contacto</h1>
+        <p>Cuéntanos qué necesitas y te enviamos la cotización.</p>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <form method="post" class="form">
+            {% csrf_token %}
+            <label>Nombre
+                <input type="text" name="nombre" required>
+            </label>
+            <label>Correo
+                <input type="email" name="email" required>
+            </label>
+            <label>Teléfono
+                <input type="text" name="telefono">
+            </label>
+            <label>Mensaje
+                <textarea name="mensaje" rows="4" required placeholder="Describe tu pedido: tipo de torta, fecha, cantidad de porciones…"></textarea>
+            </label>
+            <button class="btn btn-solid" type="submit">Enviar mensaje</button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <h2>Datos de contacto</h2>
+        <ul class="list">
+            <li><strong>Dirección:</strong> Av. Pastelería 123, Temuco</li>
+            <li><strong>Teléfono:</strong> +56 9 1234 5678</li>
+            <li><strong>Correo:</strong> contacto@dulcearte.cl</li>
+            <li><strong>Horario:</strong> lunes a sábado, 09:00 a 19:00</li>
+        </ul>
+        <p class="muted">Los mensajes enviados quedan registrados en el panel de administración.</p>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Pedidos{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Pedidos y cotizaciones</h1>
+        <p>Crea un pedido personalizado, revisa el total cotizado y su avance.</p>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <h2>Nuevo pedido</h2>
+        <form id="form-pedido" class="form">
+            <label>Cliente
+                <select name="cliente" required>
+                    <option value="">Seleccione…</option>
+                    {% for cliente in clientes %}
+                        <option value="{{ cliente.pk }}">{{ cliente.nombre }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>Fecha y hora de entrega
+                <input type="datetime-local" name="fecha_entrega" required>
+            </label>
+
+            <label>Producto
+                <select name="producto" required>
+                    <option value="">Seleccione…</option>
+                    {% for producto in productos %}
+                        <option value="{{ producto.pk }}" data-precio="{{ producto.precio_base }}">
+                            {{ producto.nombre }} · ${{ producto.precio_base|floatformat:0 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>Cantidad
+                <input type="number" name="cantidad" min="1" value="1" required>
+            </label>
+
+            <label>Diseño / personalización
+                <textarea name="descripcion_diseno" rows="3" placeholder="Temática, colores, ingredientes, dedicatoria…"></textarea>
+            </label>
+
+            <div class="form-row">
+                <label>Anticipo
+                    <input type="number" name="anticipo" min="0" step="100" value="0">
+                </label>
+                <label>Costo despacho
+                    <input type="number" name="costo_despacho" min="0" step="100" value="0">
+                </label>
+            </div>
+
+            <button class="btn btn-solid" type="submit">Registrar pedido</button>
+            <p id="form-msg" class="muted"></p>
+        </form>
+    </div>
+
+    <div class="panel">
+        <h2>Pedidos registrados</h2>
+        <table class="table" id="tabla-pedidos">
+            <thead>
+                <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="5" class="muted">Cargando…</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/pedidos.js' %}"></script>
+{% endblock %}

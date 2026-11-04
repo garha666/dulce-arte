@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Insumos{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Inventario y recetas (BOM)</h1>
+        <p>Stock de insumos y lista de materiales de cada producto. El descuento es automático al iniciar la preparación.</p>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Insumos</h2>
+    <table class="table">
+        <thead>
+            <tr><th>Insumo</th><th>Categoría</th><th>Stock</th><th>Mínimo</th><th>Costo unitario</th><th>Estado</th></tr>
+        </thead>
+        <tbody>
+        {% for insumo in insumos %}
+            <tr>
+                <td>{{ insumo.nombre }}</td>
+                <td>{{ insumo.categoria.nombre|default:"—" }}</td>
+                <td>{{ insumo.stock_actual }} {{ insumo.unidad }}</td>
+                <td>{{ insumo.stock_minimo }}</td>
+                <td>${{ insumo.costo_unitario|floatformat:0 }}</td>
+                <td>
+                    {% if insumo.stock_bajo %}
+                        <span class="badge badge-danger">Bajo mínimo</span>
+                    {% else %}
+                        <span class="badge badge-ok">OK</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="6" class="muted">Sin insumos registrados.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="panel mt">
+    <h2>Listas de materiales (BOM)</h2>
+    <div class="bom-grid">
+    {% for producto in productos %}
+        <article class="bom-card">
+            <header>
+                <strong>{{ producto.nombre }}</strong>
+                <span class="muted">${{ producto.precio_base|floatformat:0 }}</span>
+            </header>
+            <ul>
+            {% for ingrediente in producto.ingredientes.all %}
+                <li>{{ ingrediente.insumo.nombre }} · {{ ingrediente.cantidad }} {{ ingrediente.insumo.unidad }}</li>
+            {% empty %}
+                <li class="muted">Sin receta definida</li>
+            {% endfor %}
+            </ul>
+            <footer class="muted">Costo insumos: ${{ producto.costo_estimado|floatformat:0 }}</footer>
+        </article>
+    {% empty %}
+        <p class="muted">Sin productos registrados.</p>
+    {% endfor %}
+    </div>
+</section>
+{% endblock %}

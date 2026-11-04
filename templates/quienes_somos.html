@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Quiénes somos{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div>
+        <h1>Quiénes somos</h1>
+        <p>Una pastelería artesanal que coordina ventas, cocina y despacho en un mismo sistema.</p>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <h2>Nuestra historia</h2>
+        <p>Dulce Arte nació en un taller familiar donde cada torta se hornea a pedido. Con el crecimiento,
+        los pedidos en cuadernos y las recetas en la memoria empezaron a generar retrasos, insumos
+        vencidos y entregas sin confirmar.</p>
+        <p>Hoy cada pedido se cotiza, se produce y se despacha con trazabilidad completa: desde la
+        lista de materiales hasta la firma de quien recibe.</p>
+    </div>
+
+    <div class="panel">
+        <h2>Cómo trabajamos</h2>
+        <ul class="list">
+            <li><strong>Cotización:</strong> ingredientes, diseño y fecha de entrega quedan registrados.</li>
+            <li><strong>Producción:</strong> tablero Kanban con control de calidad en cada etapa.</li>
+            <li><strong>Bodega:</strong> descuento automático de insumos según la receta.</li>
+            <li><strong>Despacho:</strong> ruta asignada y entrega confirmada con firma o comprobante.</li>
+        </ul>
+    </div>
+</section>
+{% endblock %}

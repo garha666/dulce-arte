@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Ingresar{% endblock %}
+
+{% block content %}
+<section class="login-wrap">
+    <div class="panel login-card">
+        <h1>Ingresar</h1>
+        <p class="muted">Acceso al sistema de gestión de Dulce Arte.</p>
+
+        <form method="post" class="form">
+            {% csrf_token %}
+            <label>Usuario
+                <input type="text" name="username" autofocus required>
+            </label>
+            <label>Contraseña
+                <input type="password" name="password" required>
+            </label>
+            <button class="btn btn-solid" type="submit">Entrar</button>
+        </form>
+
+        <p class="muted small">¿Problemas para entrar? Contacta al administrador del sistema.</p>
+    </div>
+</section>
+{% endblock %}

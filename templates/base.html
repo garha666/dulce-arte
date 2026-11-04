@@ -1,0 +1,64 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dulce Arte{% endblock %} · Pastelería Artesanal</title>
+    <link rel="stylesheet" href="{% static 'css/estilos.css' %}">
+</head>
+<body>
+<header class="topbar">
+    <a class="brand" href="{% url 'home' %}">
+        <span class="brand-icon">🧁</span>
+        <span>Dulce Arte<small>trazabilidad de pedidos</small></span>
+    </a>
+
+    <nav class="nav">
+        {% if user.is_authenticated %}
+            <a href="{% url 'pedidos' %}">Pedidos</a>
+            <a href="{% url 'kanban' %}">Cocina (Kanban)</a>
+            <a href="{% url 'inventario' %}">Insumos</a>
+            <a href="{% url 'despachos' %}">Despachos</a>
+        {% else %}
+            <a href="{% url 'quienes_somos' %}">Quiénes somos</a>
+            <a href="{% url 'servicios' %}">Servicios</a>
+            <a href="{% url 'contacto' %}">Contacto</a>
+        {% endif %}
+    </nav>
+
+    <div class="userbox">
+        {% if user.is_authenticated %}
+            <span class="chip">{{ user.username }}</span>
+            <a class="btn btn-ghost" href="/api/" target="_blank">API</a>
+            <a class="btn btn-ghost" href="/admin/" target="_blank">Admin</a>
+            <a class="btn btn-ghost" href="{% url 'logout' %}">Salir</a>
+        {% else %}
+            <a class="btn btn-solid" href="{% url 'login' %}">Ingresar</a>
+        {% endif %}
+    </div>
+</header>
+
+{% if messages %}
+<div class="messages">
+    {% for message in messages %}
+        <div class="msg {{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<main class="container">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    <span>Dulce Arte · Pastelería artesanal · Evaluación 3 Backend</span>
+    <span>Django + DRF + PostgreSQL · AWS EC2</span>
+</footer>
+
+<script>
+    window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
