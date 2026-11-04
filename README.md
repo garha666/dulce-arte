@@ -1,4 +1,4 @@
-# Dulce Arte — Sistema de trazabilidad y pedidos
+﻿# Dulce Arte — Sistema de trazabilidad y pedidos
 
 Aplicación web fullstack para una pastelería artesanal: cotización de pedidos personalizados,
 tablero Kanban de cocina, descuento automático de insumos por receta (BOM) y despacho con
@@ -133,7 +133,7 @@ python manage.py test api
 python smoke_test.py
 ```
 
-Resultado esperado: 7 pruebas OK, todas las páginas en 200, cambio de estado 200 con descuento
+Resultado esperado: 9 pruebas OK, todas las páginas en 200, cambio de estado 200 con descuento
 de stock y transición inválida 400.
 
 ## Despliegue en AWS EC2
@@ -145,3 +145,4 @@ También hay un script idempotente: `bash deploy/instalar.sh`.
 ## Defensa
 
 Guion de demostración y preguntas frecuentes: [`docs/GUION_DEFENSA.md`](docs/GUION_DEFENSA.md).
+

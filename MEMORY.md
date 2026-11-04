@@ -1,4 +1,4 @@
-# MEMORY.md — Dulce Arte
+﻿# MEMORY.md — Dulce Arte
 
 Memoria del proyecto entre sesiones. Máximo ~50 líneas.
 
@@ -16,7 +16,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas.
 - **PostgreSQL 16 verificado** (contenedor Docker en `localhost:5433`): migraciones aplicadas,
   seed cargado (4 pedidos, 10 insumos, 18 ingredientes BOM) y `smoke_test.py` con los mismos
   resultados que en SQLite.
-- **7 pruebas automáticas** en `api/tests.py` (Kanban, BOM, stock insuficiente, despacho sin
+- **9 pruebas automáticas** en `api/tests.py` (Kanban, BOM, stock insuficiente, despacho sin
   evidencia, permisos por rol y creación por API): todas OK.
 - Repositorio git inicializado con el primer commit (`5a0f433`).
 
@@ -36,3 +36,4 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas.
 - Inicializar repositorio git, primer commit y subir a GitHub.
 - Desplegar en EC2 (Gunicorn + Nginx + Postgres) y completar `README.md` con la IP pública.
 - Preparar el guion de la defensa y completar `prompts_ia.md` con los prompts reales.
+

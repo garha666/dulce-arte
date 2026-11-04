@@ -5,12 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Dulce Arte{% endblock %} · Pastelería Artesanal</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'IMAGES/logo.svg' %}">
     <link rel="stylesheet" href="{% static 'css/estilos.css' %}">
 </head>
 <body>
 <header class="topbar">
     <a class="brand" href="{% url 'home' %}">
-        <span class="brand-icon">🧁</span>
+        <img class="brand-logo" src="{% static 'IMAGES/logo.svg' %}" alt="Logo Dulce Arte">
         <span>Dulce Arte<small>trazabilidad de pedidos</small></span>
     </a>
 

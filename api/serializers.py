@@ -161,7 +161,7 @@ class DespachoSerializer(serializers.ModelSerializer):
 
 
 class PedidoSerializer(serializers.ModelSerializer):
-    detalles = PedidoDetalleSerializer(many=True)
+    detalles = PedidoDetalleSerializer(many=True, required=False)
     cliente_nombre = serializers.CharField(source="cliente.nombre", read_only=True)
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
     total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
@@ -190,7 +190,15 @@ class PedidoSerializer(serializers.ModelSerializer):
             "detalles",
             "historial",
         )
-        read_only_fields = ("codigo", "fecha_pedido", "insumos_descontados")
+        read_only_fields = ("codigo", "fecha_pedido", "insumos_descontados", "estado")
+
+    def validate(self, datos):
+        # RF-4: un pedido nuevo debe incluir al menos un producto.
+        if self.instance is None and not datos.get("detalles"):
+            raise serializers.ValidationError(
+                {"detalles": "El pedido debe incluir al menos un producto."}
+            )
+        return datos
 
     def create(self, validated_data):
         detalles = validated_data.pop("detalles", [])

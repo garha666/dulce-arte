@@ -173,3 +173,34 @@ class ApiPermisosTest(BaseDulceArteTest):
         self.assertEqual(respuesta.status_code, 201)
         self.assertTrue(respuesta.json()["codigo"].startswith("PED-"))
         self.assertEqual(Decimal(respuesta.json()["total"]), Decimal("10000"))
+
+    def test_no_permite_crear_pedido_sin_detalles(self):
+        cliente = APIClient()
+        cliente.login(username="admin_test", password="Clave2026!")
+
+        respuesta = cliente.post(
+            "/api/pedidos/",
+            {
+                "cliente": self.cliente.pk,
+                "fecha_entrega": (timezone.now() + timedelta(days=1)).isoformat(),
+                "detalles": [],
+            },
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_estado_no_se_puede_cambiar_por_patch(self):
+        pedido = self.crear_pedido()
+        cliente = APIClient()
+        cliente.login(username="admin_test", password="Clave2026!")
+
+        respuesta = cliente.patch(
+            f"/api/pedidos/{pedido.pk}/",
+            {"estado": "entregado"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200)  # el campo se ignora
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "recibido")
