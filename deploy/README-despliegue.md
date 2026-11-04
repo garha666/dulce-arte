@@ -3,6 +3,10 @@
 Guía basada en la receta del ramo (Gunicorn + Nginx) **ampliada con PostgreSQL**, que es lo
 que exige la rúbrica.
 
+> Atajo: si ya clonaste el proyecto en `~/apps/dulce-arte`, puedes ejecutar
+> `bash deploy/instalar.sh` y saltar a la sección 8 (el script hace los pasos 2 a 7).
+> Antes revisa `deploy/.env.produccion` y reemplaza la IP y la `SECRET_KEY`.
+
 ## 1. Instancia EC2
 
 - AMI: **Ubuntu Server 22.04 LTS**, tipo `t2.micro` o `t3.micro`.

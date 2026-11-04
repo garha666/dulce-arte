@@ -6,7 +6,7 @@ confirmación de entrega mediante firma digital o comprobante fotográfico.
 
 **Evaluación N°3 — Desarrollo Backend**
 
-- Alumno: _(completar)_
+- Alumno: Matías Gubelín
 - Sección: IEC-N4-C1
 - Docente: Marcelo Alvarado Aravena
 - IP pública AWS EC2: _(completar al desplegar)_
@@ -129,13 +129,19 @@ sesión con `/admin/` y volver a `/api/`.
 
 ```powershell
 python manage.py check
+python manage.py test api
 python smoke_test.py
 ```
 
-Resultado esperado: todas las páginas en 200, cambio de estado 200 con descuento de stock
-y transición inválida 400.
+Resultado esperado: 7 pruebas OK, todas las páginas en 200, cambio de estado 200 con descuento
+de stock y transición inválida 400.
 
 ## Despliegue en AWS EC2
 
 Ver [`deploy/README-despliegue.md`](deploy/README-despliegue.md): Postgres en la instancia,
 Gunicorn con socket Unix, Nginx como proxy inverso y estáticos servidos por Nginx.
+También hay un script idempotente: `bash deploy/instalar.sh`.
+
+## Defensa
+
+Guion de demostración y preguntas frecuentes: [`docs/GUION_DEFENSA.md`](docs/GUION_DEFENSA.md).
