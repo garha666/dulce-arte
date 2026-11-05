@@ -18,7 +18,8 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas.
   resultados que en SQLite.
 - **9 pruebas automáticas** en `api/tests.py` (Kanban, BOM, stock insuficiente, despacho sin
   evidencia, permisos por rol y creación por API): todas OK.
-- Repositorio git inicializado con el primer commit (`5a0f433`).
+- Repositorio git inicializado y publicado en <https://github.com/garha666/dulce-arte>
+  (público, rama `master`).
 
 ## Decisiones (y por qué)
 - Una sola app `api`: es la estructura que pide la receta del ramo y simplifica la defensa.
