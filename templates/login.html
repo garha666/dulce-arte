@@ -1,24 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Ingresar{% endblock %}
+{% block body_class %}page-login{% endblock %}
 
 {% block content %}
 <section class="login-wrap">
-    <div class="panel login-card">
-        <h1>Ingresar</h1>
-        <p class="muted">Acceso al sistema de gestión de Dulce Arte.</p>
+    <div class="login-aside">
+        <p class="hero-role">Sistema de gestión</p>
+        <h1>El taller,<br>en orden.</h1>
+        <p>Pedidos, cocina, insumos y despacho en un solo lugar. Cada rol ve
+        únicamente lo que necesita para su turno.</p>
+        <ul class="login-list">
+            <li>Ventas cotiza y registra.</li>
+            <li>Cocina mueve el tablero y consume insumos.</li>
+            <li>Calidad aprueba antes del despacho.</li>
+            <li>Despacho confirma la entrega con evidencia.</li>
+        </ul>
+    </div>
+
+    <div class="login-card">
+        <h2>Ingresar</h2>
+        <p class="muted">Usa tu cuenta de Dulce Arte.</p>
 
         <form method="post" class="form">
             {% csrf_token %}
             <label>Usuario
-                <input type="text" name="username" autofocus required>
+                <input type="text" name="username" autocomplete="username" autofocus required>
             </label>
             <label>Contraseña
-                <input type="password" name="password" required>
+                <input type="password" name="password" autocomplete="current-password" required>
             </label>
-            <button class="btn btn-solid" type="submit">Entrar</button>
+            <button class="btn btn-solid btn-block" type="submit">Entrar al panel</button>
         </form>
 
-        <p class="muted small">¿Problemas para entrar? Contacta al administrador del sistema.</p>
+        <p class="muted small">¿Problemas para entrar? Contacta al administrador.</p>
     </div>
 </section>
 {% endblock %}

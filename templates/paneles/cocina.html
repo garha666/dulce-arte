@@ -1,0 +1,72 @@
+<section class="kpi-grid">
+    {% for etiqueta, cantidad in por_estado %}
+        <article class="kpi">
+            <p class="kpi-label">{{ etiqueta }}</p>
+            <p class="kpi-value">{{ cantidad }}</p>
+            <p class="kpi-foot">pedidos en esta etapa</p>
+        </article>
+    {% endfor %}
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-title">
+            <h2>En preparación</h2>
+            <a class="link" href="{% url 'kanban' %}">Mover en el tablero</a>
+        </div>
+        <ul class="ticket-list">
+        {% for pedido in en_preparacion %}
+            <li class="ticket">
+                <div class="ticket-head">
+                    <a href="{% url 'pedido_detalle' pedido.pk %}"><strong>{{ pedido.codigo }}</strong></a>
+                    <span>{{ pedido.fecha_entrega|date:"d/m H:i" }}</span>
+                </div>
+                <p class="ticket-client">{{ pedido.cliente.nombre }}</p>
+                {% if pedido.descripcion_diseno %}
+                    <p class="ticket-desc">{{ pedido.descripcion_diseno|truncatechars:90 }}</p>
+                {% endif %}
+                <p class="ticket-foot">Insumos descontados: {% if pedido.insumos_descontados %}sí{% else %}pendiente{% endif %}</p>
+            </li>
+        {% empty %}
+            <li class="empty">Nada en preparación ahora mismo.</li>
+        {% endfor %}
+        </ul>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">
+            <h2>En horno y decoración</h2>
+        </div>
+        <ul class="ticket-list">
+        {% for pedido in en_horneado %}
+            <li class="ticket">
+                <div class="ticket-head">
+                    <a href="{% url 'pedido_detalle' pedido.pk %}"><strong>{{ pedido.codigo }}</strong></a>
+                    <span>{{ pedido.fecha_entrega|date:"d/m H:i" }}</span>
+                </div>
+                <p class="ticket-client">{{ pedido.cliente.nombre }}</p>
+                {% if pedido.descripcion_diseno %}
+                    <p class="ticket-desc">{{ pedido.descripcion_diseno|truncatechars:90 }}</p>
+                {% endif %}
+            </li>
+        {% empty %}
+            <li class="empty">No hay pedidos en horno.</li>
+        {% endfor %}
+        </ul>
+
+        {% if insumos_bajo %}
+            <h2 class="section-sub">Insumos para reponer</h2>
+            <ul class="stock-list">
+            {% for insumo in insumos_bajo %}
+                <li>
+                    <span>
+                        <strong>{{ insumo.nombre }}</strong>
+                        <small>{{ insumo.stock_actual }} {{ insumo.unidad }} · mínimo {{ insumo.stock_minimo }}</small>
+                    </span>
+                    <span class="badge badge-danger">Reponer</span>
+                </li>
+            {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+</section>

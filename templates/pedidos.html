@@ -3,16 +3,26 @@
 {% block title %}Pedidos{% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="panel-head">
     <div>
-        <h1>Pedidos y cotizaciones</h1>
-        <p>Crea un pedido personalizado, revisa el total cotizado y su avance.</p>
+        <p class="panel-role">Pedidos y cotizaciones</p>
+        <h1>{% if puede_crear %}Registrar un pedido{% else %}Pedidos en curso{% endif %}</h1>
+        <p class="lede">
+            {% if puede_crear %}
+                Cliente, producto, fecha y diseño quedan registrados con su total.
+            {% else %}
+                Consulta el avance de los pedidos. Registrar y editar corresponde a ventas.
+            {% endif %}
+        </p>
     </div>
 </section>
 
-<section class="grid-2">
+<section class="{% if puede_crear %}grid-2{% endif %}">
+    {% if puede_crear %}
     <div class="panel">
-        <h2>Nuevo pedido</h2>
+        <div class="panel-title">
+            <h2>Nuevo pedido</h2>
+        </div>
         <form id="form-pedido" class="form">
             <label>Cliente
                 <select name="cliente" required>
@@ -32,7 +42,7 @@
                     <option value="">Seleccione…</option>
                     {% for producto in productos %}
                         <option value="{{ producto.pk }}" data-precio="{{ producto.precio_base }}">
-                            {{ producto.nombre }} · ${{ producto.precio_base|floatformat:0 }}
+                            {{ producto.nombre }} · ${{ producto.precio_base|floatformat:"0g" }}
                         </option>
                     {% endfor %}
                 </select>
@@ -42,7 +52,7 @@
                 <input type="number" name="cantidad" min="1" value="1" required>
             </label>
 
-            <label>Diseño / personalización
+            <label>Diseño y personalización
                 <textarea name="descripcion_diseno" rows="3" placeholder="Temática, colores, ingredientes, dedicatoria…"></textarea>
             </label>
 
@@ -50,24 +60,27 @@
                 <label>Anticipo
                     <input type="number" name="anticipo" min="0" step="100" value="0">
                 </label>
-                <label>Costo despacho
+                <label>Costo de despacho
                     <input type="number" name="costo_despacho" min="0" step="100" value="0">
                 </label>
             </div>
 
             <button class="btn btn-solid" type="submit">Registrar pedido</button>
-            <p id="form-msg" class="muted"></p>
+            <p id="form-msg" class="form-msg" role="status"></p>
         </form>
     </div>
+    {% endif %}
 
     <div class="panel">
-        <h2>Pedidos registrados</h2>
+        <div class="panel-title">
+            <h2>Pedidos registrados</h2>
+        </div>
         <table class="table" id="tabla-pedidos">
             <thead>
                 <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Total</th></tr>
             </thead>
             <tbody>
-                <tr><td colspan="5" class="muted">Cargando…</td></tr>
+                <tr><td colspan="5" class="empty">Cargando…</td></tr>
             </tbody>
         </table>
     </div>

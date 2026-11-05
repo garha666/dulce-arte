@@ -2,83 +2,36 @@
 {% block title %}Panel{% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="panel-head">
     <div>
-        <h1>Panel de producción</h1>
-        <p>Pedidos personalizados, cocina, insumos y despacho en un solo lugar.</p>
+        <p class="panel-role">{{ rol_label }}</p>
+        <h1>Hola, {{ user.first_name|default:user.username }}</h1>
+        <p class="lede">
+            {{ hoy|date:"l j \d\e F" }} ·
+            {{ pendientes }} pedido{{ pendientes|pluralize }} en curso
+        </p>
     </div>
-    <a class="btn btn-solid" href="{% url 'pedidos' %}">+ Nuevo pedido</a>
-</section>
-
-<section class="cards">
-    <article class="card">
-        <span class="card-label">Pedidos totales</span>
-        <strong class="card-value">{{ total_pedidos }}</strong>
-    </article>
-    <article class="card">
-        <span class="card-label">Pendientes</span>
-        <strong class="card-value">{{ pendientes }}</strong>
-    </article>
-    <article class="card">
-        <span class="card-label">Insumos bajo mínimo</span>
-        <strong class="card-value {% if stock_bajo %}danger{% endif %}">{{ stock_bajo }}</strong>
-    </article>
-    <article class="card">
-        <span class="card-label">Ventas comprometidas</span>
-        <strong class="card-value">${{ ventas_total|floatformat:0 }}</strong>
-    </article>
-</section>
-
-<section class="grid-2">
-    <div class="panel">
-        <h2>Próximas entregas</h2>
-        {% if proximos %}
-        <table class="table">
-            <thead>
-                <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Estado</th></tr>
-            </thead>
-            <tbody>
-            {% for pedido in proximos %}
-                <tr>
-                    <td><a href="{% url 'pedido_detalle' pedido.pk %}">{{ pedido.codigo }}</a></td>
-                    <td>{{ pedido.cliente.nombre }}</td>
-                    <td>{{ pedido.fecha_entrega|date:"d/m H:i" }}</td>
-                    <td><span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span></td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-            <p class="muted">No hay pedidos pendientes. ¡Buen momento para adelantar producción!</p>
+    <div class="panel-head-actions">
+        {% if rol == 'admin' or rol == 'ventas' %}
+            <a class="btn btn-solid" href="{% url 'pedidos' %}">Registrar pedido</a>
+        {% endif %}
+        {% if rol == 'admin' or rol == 'cocina' or rol == 'calidad' %}
+            <a class="btn btn-ghost" href="{% url 'kanban' %}">Abrir cocina</a>
+        {% elif rol == 'despacho' %}
+            <a class="btn btn-solid" href="{% url 'despachos' %}">Ver despachos</a>
         {% endif %}
     </div>
-
-    <div class="panel">
-        <h2>Alertas de inventario</h2>
-        {% if insumos_bajo %}
-            <ul class="list">
-            {% for insumo in insumos_bajo %}
-                <li>
-                    <strong>{{ insumo.nombre }}</strong>
-                    <span class="muted">{{ insumo.stock_actual }} {{ insumo.unidad }} (mínimo {{ insumo.stock_minimo }})</span>
-                </li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p class="muted">Todo el inventario está sobre el stock mínimo.</p>
-        {% endif %}
-
-        <h2 class="mt">Últimos movimientos</h2>
-        <ul class="list">
-        {% for movimiento in ultimos_movimientos %}
-            <li>
-                <strong>{{ movimiento.get_tipo_display }}</strong>
-                <span class="muted">{{ movimiento.insumo.nombre }} · {{ movimiento.cantidad }} {{ movimiento.insumo.unidad }}</span>
-            </li>
-        {% empty %}
-            <li class="muted">Sin movimientos registrados.</li>
-        {% endfor %}
-        </ul>
-    </div>
 </section>
+
+{% if rol == 'admin' %}
+    {% include "paneles/admin.html" %}
+{% elif rol == 'ventas' %}
+    {% include "paneles/ventas.html" %}
+{% elif rol == 'cocina' %}
+    {% include "paneles/cocina.html" %}
+{% elif rol == 'calidad' %}
+    {% include "paneles/calidad.html" %}
+{% elif rol == 'despacho' %}
+    {% include "paneles/despacho.html" %}
+{% endif %}
 {% endblock %}

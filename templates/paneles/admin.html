@@ -1,0 +1,99 @@
+<section class="kpi-grid">
+    <article class="kpi">
+        <p class="kpi-label">Pedidos registrados</p>
+        <p class="kpi-value">{{ total_pedidos }}</p>
+        <p class="kpi-foot">{{ pedidos_hoy }} hoy</p>
+    </article>
+    <article class="kpi">
+        <p class="kpi-label">En curso</p>
+        <p class="kpi-value">{{ pendientes }}</p>
+        <p class="kpi-foot">sin entregar ni cancelar</p>
+    </article>
+    <article class="kpi {% if stock_bajo %}kpi-alert{% endif %}">
+        <p class="kpi-label">Insumos bajo mínimo</p>
+        <p class="kpi-value">{{ stock_bajo }}</p>
+        <p class="kpi-foot">revisa la bodega</p>
+    </article>
+    <article class="kpi">
+        <p class="kpi-label">Ventas comprometidas</p>
+        <p class="kpi-value">${{ ventas_total|floatformat:"0g" }}</p>
+        <p class="kpi-foot">pedidos no cancelados</p>
+    </article>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-title">
+            <h2>Próximas entregas</h2>
+            <a class="link" href="{% url 'pedidos' %}">Ver todos</a>
+        </div>
+        {% if proximos %}
+        <table class="table">
+            <thead>
+                <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+            {% for pedido in proximos %}
+                <tr>
+                    <td><a href="{% url 'pedido_detalle' pedido.pk %}">{{ pedido.codigo }}</a></td>
+                    <td>{{ pedido.cliente.nombre }}</td>
+                    <td>{{ pedido.fecha_entrega|date:"d/m H:i" }}</td>
+                    <td><span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p class="empty">No hay pedidos pendientes. Es un buen momento para adelantar producción.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">
+            <h2>Inventario</h2>
+            <a class="link" href="{% url 'inventario' %}">Ver insumos</a>
+        </div>
+        {% if insumos_bajo %}
+            <ul class="stock-list">
+            {% for insumo in insumos_bajo %}
+                <li>
+                    <span>
+                        <strong>{{ insumo.nombre }}</strong>
+                        <small>{{ insumo.stock_actual }} {{ insumo.unidad }} · mínimo {{ insumo.stock_minimo }}</small>
+                    </span>
+                    <span class="badge badge-danger">Reponer</span>
+                </li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty">Todo el inventario está sobre el stock mínimo.</p>
+        {% endif %}
+
+        <h2 class="section-sub">Últimos movimientos</h2>
+        <ul class="list">
+        {% for movimiento in ultimos_movimientos %}
+            <li>
+                <strong>{{ movimiento.get_tipo_display }}</strong>
+                <span class="muted">{{ movimiento.insumo.nombre }} · {{ movimiento.cantidad }} {{ movimiento.insumo.unidad }}</span>
+            </li>
+        {% empty %}
+            <li class="muted">Sin movimientos registrados.</li>
+        {% endfor %}
+        </ul>
+    </div>
+</section>
+
+<section class="panel mt">
+    <div class="panel-title">
+        <h2>Pedidos por etapa</h2>
+        <a class="link" href="{% url 'kanban' %}">Abrir tablero</a>
+    </div>
+    <div class="stage-row">
+        {% for etiqueta, cantidad in por_estado %}
+            <div class="stage">
+                <span class="stage-count">{{ cantidad }}</span>
+                <span class="stage-name">{{ etiqueta }}</span>
+            </div>
+        {% endfor %}
+    </div>
+</section>

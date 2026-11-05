@@ -1,0 +1,72 @@
+<section class="kpi-grid">
+    <article class="kpi">
+        <p class="kpi-label">Mis pedidos</p>
+        <p class="kpi-value">{{ mis_pedidos|length }}</p>
+        <p class="kpi-foot">registrados por ti</p>
+    </article>
+    <article class="kpi">
+        <p class="kpi-label">Ventas del mes</p>
+        <p class="kpi-value">${{ ventas_mes|floatformat:"0g" }}</p>
+        <p class="kpi-foot">sin pedidos cancelados</p>
+    </article>
+    <article class="kpi">
+        <p class="kpi-label">Clientes</p>
+        <p class="kpi-value">{{ clientes_total }}</p>
+        <p class="kpi-foot">en la cartera</p>
+    </article>
+    <article class="kpi">
+        <p class="kpi-label">Productos activos</p>
+        <p class="kpi-value">{{ productos_total }}</p>
+        <p class="kpi-foot">disponibles para cotizar</p>
+    </article>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <div class="panel-title">
+            <h2>Pedidos que vienen</h2>
+            <a class="link" href="{% url 'pedidos' %}">Registrar otro</a>
+        </div>
+        {% if proximos %}
+        <table class="table">
+            <thead>
+                <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Total</th></tr>
+            </thead>
+            <tbody>
+            {% for pedido in proximos %}
+                <tr>
+                    <td><a href="{% url 'pedido_detalle' pedido.pk %}">{{ pedido.codigo }}</a></td>
+                    <td>{{ pedido.cliente.nombre }}</td>
+                    <td>{{ pedido.fecha_entrega|date:"d/m H:i" }}</td>
+                    <td><span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span></td>
+                    <td>${{ pedido.total|floatformat:"0g" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <p class="empty">No hay entregas próximas. Registra un pedido para comenzar.</p>
+        {% endif %}
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">
+            <h2>Lo que registraste</h2>
+        </div>
+        {% if mis_pedidos %}
+        <ul class="order-list">
+        {% for pedido in mis_pedidos %}
+            <li>
+                <div>
+                    <a href="{% url 'pedido_detalle' pedido.pk %}"><strong>{{ pedido.codigo }}</strong></a>
+                    <small>{{ pedido.cliente.nombre }} · entrega {{ pedido.fecha_entrega|date:"d/m H:i" }}</small>
+                </div>
+                <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+            </li>
+        {% endfor %}
+        </ul>
+        {% else %}
+            <p class="empty">Todavía no has registrado pedidos.</p>
+        {% endif %}
+    </div>
+</section>

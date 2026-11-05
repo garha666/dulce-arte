@@ -5,7 +5,9 @@ que exige la rúbrica.
 
 > Atajo: si ya clonaste el proyecto en `~/apps/dulce-arte`, puedes ejecutar
 > `bash deploy/instalar.sh` y saltar a la sección 8 (el script hace los pasos 2 a 7).
-> Antes revisa `deploy/.env.produccion` y reemplaza la IP y la `SECRET_KEY`.
+> Antes revisa `deploy/.env.produccion` y reemplaza `IP_ELASTICA`. El script genera una
+> `SECRET_KEY` y una clave de PostgreSQL aleatorias, y **no** carga datos demo salvo que uses
+> `SEED_DEMO_DATA=true`.
 
 ## 1. Instancia EC2
 
@@ -32,7 +34,7 @@ sudo -u postgres psql
 
 ```sql
 CREATE DATABASE dulcearte;
-CREATE USER dulcearte WITH PASSWORD 'dulcearte2026';
+CREATE USER dulcearte WITH PASSWORD 'CAMBIA_ESTA_CLAVE';
 ALTER ROLE dulcearte SET client_encoding TO 'utf8';
 ALTER ROLE dulcearte SET default_transaction_isolation TO 'read committed';
 ALTER ROLE dulcearte SET timezone TO 'America/Santiago';
@@ -53,17 +55,19 @@ source env/bin/activate
 pip install -r requirements.txt
 ```
 
-Crear `.env` en la instancia (no se sube al repo):
+Crear `.env` en la instancia (no se sube al repo). Si usas `instalar.sh`, este archivo se
+genera con claves aleatorias; si lo haces a mano, usa tus propios valores:
 
 ```
 DJANGO_SECRET_KEY=<clave larga y aleatoria>
 DJANGO_DEBUG=False
 DJANGO_ALLOWED_HOSTS=IP_ELASTICA,localhost,127.0.0.1
 DJANGO_CSRF_TRUSTED_ORIGINS=http://IP_ELASTICA
+DJANGO_SECURE_COOKIES=False
 DB_ENGINE=postgresql
 DB_NAME=dulcearte
 DB_USER=dulcearte
-DB_PASSWORD=dulcearte2026
+DB_PASSWORD=<la misma clave del CREATE USER>
 DB_HOST=127.0.0.1
 DB_PORT=5432
 ```
@@ -72,8 +76,12 @@ DB_PORT=5432
 python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
-python seed_data.py           # opcional, datos de demostración
+# Solo para una demo controlada; cambia las claves demo después:
+SEED_DEMO_DATA=true bash deploy/instalar.sh   # o: python seed_data.py
 ```
+
+> `deploy/.env.produccion` solo contiene marcadores. No guardes credenciales reales en el
+> repositorio: el `.env` de la instancia queda fuera de git.
 
 ## 5. Gunicorn
 
@@ -116,11 +124,23 @@ namei -l /home/ubuntu/apps/dulce-arte/dulcearte.sock
 
 Abrir en el navegador:
 
-- `http://IP_ELASTICA/` → login
+- `http://IP_ELASTICA/` → landing pública (el panel de gestión está en `/login/`)
 - `http://IP_ELASTICA/admin/` → Django Admin con estilos (estáticos servidos por Nginx)
 - `http://IP_ELASTICA/api/` → navegador de DRF
 
 Si el Admin aparece sin CSS, revisar `STATIC_ROOT`, `collectstatic` y el bloque `location /static/`.
+
+## 9. HTTPS y cookies seguras (recomendado)
+
+Con un certificado (por ejemplo, Let's Encrypt) en Nginx:
+
+1. Cambia `DJANGO_CSRF_TRUSTED_ORIGINS=https://IP_ELASTICA` en `.env`.
+2. Cambia `DJANGO_SECURE_COOKIES=True`.
+3. Reinicia: `sudo systemctl restart gunicorn nginx`.
+
+Con `DJANGO_DEBUG=False` y `DJANGO_SECURE_COOKIES=True`, las cookies de sesión y CSRF solo
+viajan por HTTPS. No actives esa opción mientras la demo funcione por HTTP, porque el login
+dejaría de mantener la sesión.
 
 ## Errores frecuentes
 

@@ -19,6 +19,9 @@ Criterio de uso: la IA propone, el alumno revisa, prueba y decide.
 | 7 | Frontend | "Genera templates responsivos con la paleta de la pastelería y un tablero Kanban que consuma la API con fetch y X-CSRFToken." | `base.html`, `home`, `kanban`, `pedidos`, `inventario`, `despachos`, `contacto` + CSS y JS. | Aceptado; se cambió el Kanban a render del servidor con acciones asíncronas. | `templates/`, `static/` |
 | 8 | Datos de prueba y verificación | "Crea un seed idempotente y una prueba de humo que valide páginas, transición válida e inválida." | `seed_data.py` y `smoke_test.py`. | Aceptado; se corrigió `ALLOWED_HOSTS` para el cliente de pruebas. | `seed_data.py`, `smoke_test.py` |
 | 9 | Despliegue | "Adapta la receta de EC2 (Gunicorn + Nginx) para incluir PostgreSQL, estáticos y permisos del socket." | `deploy/gunicorn.service`, `deploy/nginx.conf`, guía paso a paso. | Pendiente de ejecutar en la instancia. | `deploy/` |
+| 10 | Rediseño por roles | "Reorganiza la interfaz con landing pública, paneles distintos por rol y una navegación que muestre solo lo que cada usuario necesita, sin frameworks JS." | `templates/landing.html`, `templates/paneles/`, `api/roles.py`, `api/context_processors.py`, estilos y fuentes locales. | Aceptado; se mantuvieron los templates y la lógica existente. | `templates/`, `static/`, `api/roles.py`, `api/context_processors.py`, `drf/settings.py` |
+| 11 | Endurecimiento de API y negocio | "Haz que la API respete los roles, impide crear despachos de pedidos no listos, exige evidencia y receptor, cierra el pedido al confirmar y bloquea editar/borrar después del BOM." | Permisos por rol en `api/permissions.py`, validaciones en modelo/serializer/vistas y transición atómica del despacho. | Aceptado; se agregaron pruebas para cada regla. | `api/permissions.py`, `api/views.py`, `api/models.py`, `api/serializers.py` |
+| 12 | Pruebas y documentación | "Agrega pruebas de permisos, despacho, BOM y escape de HTML; actualiza README, MEMORY, spec, guion y registro de IA." | 24 pruebas en `api/tests.py`, `smoke_test.py` más estricto, documentación sincronizada y escape en `pedidos.js`. | Aceptado; la verificación final se ejecutó con `manage.py check` y `manage.py test api`. | `api/tests.py`, `smoke_test.py`, `static/js/pedidos.js`, `README.md`, `MEMORY.md`, `specs/`, `docs/` |
 
 ## Qué se rechazó y por qué
 - **Vista única tipo SPA con React**: descartada porque la receta del ramo pide templates de Django.
@@ -26,5 +29,6 @@ Criterio de uso: la IA propone, el alumno revisa, prueba y decide.
 - **Guardar el estado como texto libre**: descartado; se usan `choices` y un historial de eventos.
 
 ## Verificación humana
-Cada cambio se probó con `python manage.py check` y `python smoke_test.py`.
-Las credenciales del `.env` no se comparten con la IA ni se suben al repositorio.
+Cada cambio se probó con `python manage.py check`, `python manage.py test api` y
+`python smoke_test.py`. Las credenciales del `.env` no se comparten con la IA ni se suben al
+repositorio; las claves de demo solo se usan en local.

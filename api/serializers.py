@@ -150,12 +150,33 @@ class DespachoSerializer(serializers.ModelSerializer):
         )
 
     def validate(self, datos):
-        fecha_entrega = datos.get("fecha_entrega", getattr(self.instance, "fecha_entrega", None))
+        pedido = datos.get("pedido", getattr(self.instance, "pedido", None))
+        if self.instance is None and pedido and pedido.estado != "listo":
+            raise serializers.ValidationError(
+                {
+                    "pedido": (
+                        "Solo se puede crear un despacho para un pedido "
+                        "en estado Listo."
+                    )
+                }
+            )
+
+        fecha_entrega = datos.get(
+            "fecha_entrega", getattr(self.instance, "fecha_entrega", None)
+        )
         firma = datos.get("firma", getattr(self.instance, "firma", None))
         comprobante = datos.get("comprobante", getattr(self.instance, "comprobante", None))
+        receptor = datos.get(
+            "receptor_nombre", getattr(self.instance, "receptor_nombre", "")
+        )
+
         if fecha_entrega and not (firma or comprobante):
             raise serializers.ValidationError(
                 "Para confirmar la entrega debes adjuntar firma digital o comprobante."
+            )
+        if fecha_entrega and not (receptor or "").strip():
+            raise serializers.ValidationError(
+                {"receptor_nombre": "Debes indicar quién recibe la entrega."}
             )
         return datos
 
@@ -208,6 +229,12 @@ class PedidoSerializer(serializers.ModelSerializer):
         return pedido
 
     def update(self, instance, validated_data):
+        if instance.insumos_descontados:
+            raise serializers.ValidationError(
+                "No se puede modificar un pedido cuyos insumos ya fueron "
+                "descontados del inventario."
+            )
+
         detalles = validated_data.pop("detalles", None)
         for campo, valor in validated_data.items():
             setattr(instance, campo, valor)

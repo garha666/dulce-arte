@@ -320,6 +320,14 @@ class Pedido(models.Model):
                 f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}."
             )
 
+        if nuevo_estado == "entregado":
+            despacho = Despacho.objects.filter(pedido=self).first()
+            if not despacho or not despacho.confirmado:
+                raise ValidationError(
+                    "Para marcar el pedido como entregado debes confirmar un "
+                    "despacho con firma o comprobante."
+                )
+
         if nuevo_estado == "preparacion":
             self.descontar_insumos(usuario)
 
@@ -458,11 +466,20 @@ class Despacho(models.Model):
         return bool(self.fecha_entrega and (self.firma or self.comprobante))
 
     def clean(self):
-        if self.fecha_entrega and not (self.firma or self.comprobante):
-            raise ValidationError(
-                "Para confirmar la entrega debes adjuntar la firma digital "
-                "o el comprobante fotográfico."
-            )
+        if self.fecha_entrega:
+            if not (self.firma or self.comprobante):
+                raise ValidationError(
+                    "Para confirmar la entrega debes adjuntar la firma digital "
+                    "o el comprobante fotográfico."
+                )
+            if not (self.receptor_nombre or "").strip():
+                raise ValidationError("Debes indicar quién recibe la entrega.")
+
+        if self._state.adding and self.pedido_id:
+            if self.pedido.estado != "listo":
+                raise ValidationError(
+                    "Solo se puede crear un despacho para un pedido en estado Listo."
+                )
 
 
 # --------------------------------------------------------------------------- #

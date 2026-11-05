@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Pastelería artesanal{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-copy">
+        <p class="hero-role">Pastelería artesanal en Temuco</p>
+        <h1>Tortas a pedido,<br>entregadas a tiempo.</h1>
+        <p class="lede">
+            Cotiza tu pedido, sigue cada etapa en cocina y recibe la entrega con
+            confirmación. Sin cuadernos, sin llamados para saber cómo va.
+        </p>
+        <div class="hero-actions">
+            <a class="btn btn-solid btn-lg" href="{% url 'contacto' %}">Cotizar un pedido</a>
+            <a class="btn btn-ghost btn-lg" href="{% url 'servicios' %}">Ver servicios</a>
+        </div>
+    </div>
+
+    <aside class="comanda" aria-label="Ejemplo de comanda de pedido">
+        <div class="comanda-top">
+            <span>Comanda</span>
+            <strong>PED-00042</strong>
+        </div>
+        <dl class="comanda-data">
+            <div><dt>Cliente</dt><dd>María Fernández</dd></div>
+            <div><dt>Entrega</dt><dd>Sábado, 16:30</dd></div>
+            <div><dt>Estado</dt><dd><span class="badge estado-preparacion">En preparación</span></dd></div>
+        </dl>
+        <ul class="comanda-items">
+            <li><span>1 × Torta de chocolate</span><span>$18.990</span></li>
+            <li><span>Insumos descontados</span><span>Sí</span></li>
+            <li><span>Saldo por cobrar</span><span>$16.990</span></li>
+        </ul>
+        <p class="comanda-note">Cada pedido deja historial: quién lo movió, cuándo y con qué insumos.</p>
+    </aside>
+</section>
+
+<section class="section">
+    <div class="section-head">
+        <h2>Lo que sale del horno</h2>
+        <a class="link" href="{% url 'servicios' %}">Ver todo el catálogo</a>
+    </div>
+    <div class="product-grid">
+        {% for producto in productos %}
+        <article class="product">
+            <div class="product-head">
+                <h3>{{ producto.nombre }}</h3>
+                <span class="product-price">${{ producto.precio_base|floatformat:"0g" }}</span>
+            </div>
+            <p>{{ producto.descripcion|default:"Preparado a pedido con ingredientes frescos." }}</p>
+            <p class="product-meta">{{ producto.porciones }} porciones</p>
+            <a class="link" href="{% url 'contacto' %}">Pedir este producto</a>
+        </article>
+        {% empty %}
+        <p class="empty">El catálogo se está actualizando.</p>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="section">
+    <div class="section-head">
+        <h2>De la cotización a la entrega</h2>
+    </div>
+    <ol class="steps">
+        <li>
+            <span class="step-number">01</span>
+            <h3>Cotizas</h3>
+            <p>Eliges producto, fecha y diseño. Recibes el total y el saldo a pagar.</p>
+        </li>
+        <li>
+            <span class="step-number">02</span>
+            <h3>Cocina prepara</h3>
+            <p>El pedido avanza por etapas y descuenta los insumos de la receta.</p>
+        </li>
+        <li>
+            <span class="step-number">03</span>
+            <h3>Calidad revisa</h3>
+            <p>Antes de salir, cada torta se aprueba o vuelve a preparación.</p>
+        </li>
+        <li>
+            <span class="step-number">04</span>
+            <h3>Recibes</h3>
+            <p>El despacho se confirma con firma o comprobante fotográfico.</p>
+        </li>
+    </ol>
+</section>
+
+<section class="cta-band">
+    <div>
+        <h2>¿Tienes una fecha en mente?</h2>
+        <p>Cuéntanos qué necesitas y te respondemos con una cotización.</p>
+    </div>
+    <a class="btn btn-solid btn-lg" href="{% url 'contacto' %}">Escribir al taller</a>
+</section>
+{% endblock %}

@@ -42,14 +42,16 @@ cocina, descontar los insumos según la receta y confirmar la entrega con eviden
 - RF-12: EL SISTEMA descuenta los insumos una sola vez por pedido, aunque se repita la transición.
 
 ### Despacho y confirmación
-- RF-13: CUANDO el despacho se crea para un pedido listo, EL SISTEMA guarda la dirección de entrega.
-- RF-14: SI se intenta confirmar la entrega sin firma ni comprobante, ENTONCES EL SISTEMA rechaza la operación con un mensaje claro.
-- RF-15: CUANDO se confirma la entrega con firma o comprobante, EL SISTEMA guarda la fecha, el receptor y la evidencia.
+- RF-13: CUANDO se crea un despacho para un pedido en estado "Listo", EL SISTEMA guarda la dirección de entrega; SI el pedido no está "Listo", ENTONCES rechaza la operación.
+- RF-14: SI se intenta confirmar la entrega sin firma, sin comprobante o sin receptor, ENTONCES EL SISTEMA rechaza la operación con un mensaje claro.
+- RF-15: CUANDO se confirma la entrega con firma o comprobante, EL SISTEMA guarda la fecha, el receptor y la evidencia, y deja el pedido en "Entregado" de forma atómica.
 - RF-16: EL SISTEMA muestra en el detalle del pedido su historial completo de estados.
+- RF-17: SI un pedido ya tiene los insumos descontados, ENTONCES EL SISTEMA no permite editar sus detalles ni eliminarlo.
+- RF-18: EL SISTEMA aplica los permisos por rol tanto en las páginas HTML como en la API.
 
 ## Requisitos no funcionales
 - RNF-1: Interfaz responsiva en español, usable desde móvil.
-- RNF-2: Acceso a las páginas y a la API solo con sesión iniciada; permisos por rol en el Kanban.
+- RNF-2: El sitio público (landing, quiénes somos, servicios y contacto) es accesible sin sesión; el panel de gestión, el Kanban, el inventario, los despachos y la API exigen sesión y aplican permisos por rol.
 - RNF-3: Fechas en zona horaria `America/Santiago`.
 - RNF-4: Base de datos PostgreSQL en la instancia EC2.
 
@@ -68,7 +70,8 @@ cocina, descontar los insumos según la receta y confirmar la entrega con eviden
 ## Criterios de finalización
 - Todas las páginas responden 200 y las transiciones inválidas 400 (`smoke_test.py`).
 - El stock disminuye exactamente por la cantidad del BOM y queda el movimiento registrado.
-- El pedido no puede confirmarse como entregado sin evidencia.
+- El pedido no puede confirmarse como entregado sin un despacho confirmado con evidencia.
+- Los roles incorrectos reciben 403 en la API y un pedido con BOM descontado no se edita ni elimina.
 
 ## Dudas abiertas
 - Ninguna.

@@ -30,13 +30,14 @@ python manage.py runserver
 
 ## 2. Sitio público y login (1 min)
 
-1. Abrir `/quienes-somos/`, `/servicios/` y `/contacto/`.
+1. Abrir `/` → landing pública; luego `/quienes-somos/`, `/servicios/` y `/contacto/`.
 2. Enviar el formulario de contacto → mensaje de éxito.
-3. Mostrar los botones **API** y **Admin** en la barra superior.
+3. Señalar que la barra pública solo muestra **Ingresar**; **Admin** está en el footer y **API**
+   aparece en el menú de usuario después de iniciar sesión.
 4. Entrar con `admin` / `Dulce2026!`.
 
-> "Las páginas públicas no requieren sesión; el panel de gestión y la API sí
-> (`IsAuthenticated` en `settings.py`)."
+> "El sitio público no requiere sesión; el panel de gestión y la API sí
+> (`IsAuthenticated` en `settings.py`). La landing es pública a propósito."
 
 ## 3. Cotización de un pedido (2 min)
 
@@ -84,12 +85,14 @@ python smoke_test.py
 
 1. Ir a **Despachos**.
 2. Crear el despacho de un pedido *Listo* con dirección.
-3. Intentar confirmar sin archivo → error (lo valida `Despacho.clean`).
+3. Intentar confirmar sin archivo o sin receptor → error (lo validan `Despacho.clean` y la vista).
 4. Adjuntar una imagen como firma o comprobante, escribir el receptor y confirmar.
-5. Mostrar el estado *Confirmado* y el enlace a la evidencia.
+5. Mostrar el estado *Confirmado*, el enlace a la evidencia y el pedido ahora en *Entregado*.
+6. Intentar confirmar de nuevo → el sistema lo rechaza.
 
-> "La entrega no se puede cerrar sin firma ni comprobante; es una regla de negocio del
-> modelo, no solo del formulario."
+> "La entrega no se puede cerrar sin firma ni comprobante, y el pedido no puede pasar a
+> Entregado si no hay un despacho confirmado. La confirmación es atómica: o se guarda la
+> evidencia y cambia el estado, o no se guarda nada."
 
 ## 7. Admin y API (1 min)
 
@@ -99,8 +102,10 @@ python smoke_test.py
 3. Cerrar sesión y abrir `/api/pedidos/` → redirección/401.
 
 > "La API usa ViewSets y DefaultRouter, como pide la receta del ramo. Los catálogos son de
-> solo lectura para usuarios que no son administradores; el Kanban solo lo mueven cocina,
-> calidad y admin (`api/permissions.py`)."
+> solo lectura para usuarios que no son administradores. Los permisos por rol están
+> centralizados en `roles.py` y `permissions.py`: ventas no descuenta insumos, cocina/calidad
+> no crean pedidos ni despachos, y despacho gestiona sus rutas. Si pruebo con otro rol, la API
+> responde 403, no 400."
 
 ## 8. Modelo y despliegue (1 min)
 
@@ -117,9 +122,11 @@ python smoke_test.py
 | ¿Dónde está la lógica de negocio? | En `models.py`: `cambiar_estado`, `descontar_insumos`, `Despacho.clean`. Las vistas solo orquestan. |
 | ¿Cómo evitas descontar dos veces? | Bandera `insumos_descontados` + transacción atómica. |
 | ¿Qué pasa si no hay stock? | `ValidationError` con los faltantes; la transacción se revierte y el pedido no cambia de estado. |
-| ¿Cómo se protege la API? | `IsAuthenticated` global, permisos por rol y CSRF en el JS con `X-CSRFToken`. |
+| ¿Cómo se protege la API? | `IsAuthenticated` global, permisos por rol en `permissions.py` y CSRF en el JS con `X-CSRFToken`. Un rol incorrecto recibe 403. |
 | ¿Por qué PostgreSQL y no SQLite? | Requisito del ramo; además soporta concurrencia y `select_for_update`, que SQLite no. |
 | ¿Qué pasa si dos usuarios mueven el pedido a la vez? | El flujo se valida contra el estado actual y el descuento bloquea las filas de insumos. |
+| ¿Se puede marcar Entregado sin evidencia? | No: `Pedido.cambiar_estado` exige un `Despacho` confirmado con firma o comprobante. |
+| ¿Se puede editar un pedido después de descontar insumos? | No: el serializer y la vista de borrado lo bloquean con 400. |
 | ¿Cómo se despliega? | EC2 Ubuntu, Postgres local, venv, `migrate`, `collectstatic`, Gunicorn en socket Unix y Nginx. |
 | ¿Qué hace el Admin? | Gestión de todos los modelos con filtros, búsqueda, inlines y una acción masiva para pasar pedidos a *Listo*. |
 | ¿Qué mejorarías? | Notificaciones al cliente, facturación electrónica y tests de carga; hoy están fuera de alcance. |

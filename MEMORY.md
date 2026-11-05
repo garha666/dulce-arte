@@ -3,38 +3,41 @@
 Memoria del proyecto entre sesiones. Máximo ~50 líneas.
 
 ## Estado actual
-- Proyecto Django `drf` + app `api` creado según receta del ramo.
-- Modelos completos en 3FN: insumos, categorías, productos, BOM (`RecetaInsumo`),
-  clientes, pedidos, detalle, historial de estados, movimientos de insumos, despachos,
-  perfiles de usuario y mensajes de contacto.
-- Admin personalizado (cabecera, list_display, list_filter, search_fields, inlines).
-- API DRF con ViewSets + acciones `cambiar_estado` y `descontar_insumos`.
-- Templates: home, kanban, pedidos, inventario, despachos, detalle, login, quiénes somos,
-  servicios y contacto. JS con fetch y `X-CSRFToken` para el Kanban y pedidos.
-- Datos de prueba con `seed_data.py` (5 usuarios, 10 insumos, 3 productos, 4 pedidos).
-- Verificado: `manage.py check` OK; `smoke_test.py` con todas las páginas en 200.
-- **PostgreSQL 16 verificado** (contenedor Docker en `localhost:5433`): migraciones aplicadas,
-  seed cargado (4 pedidos, 10 insumos, 18 ingredientes BOM) y `smoke_test.py` con los mismos
-  resultados que en SQLite.
-- **9 pruebas automáticas** en `api/tests.py` (Kanban, BOM, stock insuficiente, despacho sin
-  evidencia, permisos por rol y creación por API): todas OK.
-- Repositorio git inicializado y publicado en <https://github.com/garha666/dulce-arte>
-  (público, rama `master`).
+- Proyecto Django `drf` + app `api`; modelos en 3FN (insumos, BOM, pedidos, historial,
+  movimientos, despachos y perfiles).
+- Admin personalizado y API DRF con acciones `cambiar_estado` y `descontar_insumos`.
+- Rediseño por roles: landing pública, paneles por rol, `api/roles.py` y
+  `api/context_processors.py`; menús y accesos centralizados.
+- La API aplica los mismos roles que las páginas: ventas no descuenta insumos ni mueve el
+  Kanban; cocina/calidad no crean ni borran pedidos o despachos; despacho gestiona sus rutas.
+- Flujo de despacho cerrado: solo pedidos `listo`, receptor y evidencia obligatorios, sin
+  doble confirmación, transición atómica a `entregado` y bloqueo de `entregado` sin despacho
+  confirmado.
+- Pedidos con `insumos_descontados=True` no se editan ni eliminan por la API.
+- El listado JS escapa `cliente_nombre` y el código antes de insertarlos en `innerHTML`.
+- **24 pruebas automáticas** en `api/tests.py` (Kanban, BOM, permisos, despacho, bloqueo
+  post-BOM y escape del frontend): todas OK.
+- Verificado: `manage.py check` OK; `smoke_test.py` exige un pedido `recibido` y valida
+  páginas 200, descuento de stock y transición inválida 400.
+- PostgreSQL 16 verificado en Docker (`localhost:5433`, 10 insumos, BOM y pedidos de prueba).
+- Repositorio git publicado en <https://github.com/garha666/dulce-arte> (rama `master`).
 
 ## Decisiones (y por qué)
-- Una sola app `api`: es la estructura que pide la receta del ramo y simplifica la defensa.
-- Lógica del Kanban en el modelo: evita que la API y las vistas HTML se comporten distinto.
-- SQLite solo para pruebas locales rápidas; la entrega usa PostgreSQL en la instancia EC2.
-- `insumos_descontados` como bandera: garantiza que el BOM se descuente una única vez.
-- Docker publica Postgres en **5433** porque el puerto 5432 del equipo ya está ocupado por
-  otro PostgreSQL local; en la EC2 se usa el 5432 estándar.
+- Una sola app `api`: estructura de la receta del ramo y defensa más simple.
+- Lógica de negocio en el modelo (`cambiar_estado`, `descontar_insumos`, `Despacho.clean`);
+  las vistas solo orquestan.
+- Permisos compartidos en `roles.py` + `permissions.py` para que HTML y API no diverjan.
+- `insumos_descontados` evita el doble descuento; el despacho confirmado es la única evidencia
+  válida para pasar a `entregado`.
+- SQLite solo para pruebas rápidas; la entrega usa PostgreSQL en EC2 (Docker local en 5433).
 
 ## Aprendizajes y errores a evitar
 - `ALLOWED_HOSTS` debe incluir la IP elástica de la EC2, o Django responde 400.
 - `STATIC_ROOT` + `collectstatic` son obligatorios para que Nginx sirva Admin y DRF.
+- Ocultar un botón no protege una regla: la API también debe validar permisos y estado.
+- El seed de demo crea claves conocidas: `instalar.sh` ya no lo ejecuta por defecto
+  (`SEED_DEMO_DATA=true` es explícito) y genera `SECRET_KEY` y clave de PostgreSQL aleatorias.
 
-## Próximos pasos
-- Inicializar repositorio git, primer commit y subir a GitHub.
-- Desplegar en EC2 (Gunicorn + Nginx + Postgres) y completar `README.md` con la IP pública.
-- Preparar el guion de la defensa y completar `prompts_ia.md` con los prompts reales.
-
+## Pendientes
+- Completar la IP pública en `README.md` y verificar el despliegue en EC2.
+- Configurar HTTPS en Nginx y activar `DJANGO_SECURE_COOKIES=True` en la instancia.

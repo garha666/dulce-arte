@@ -2,10 +2,11 @@
 {% block title %}Pedido {{ pedido.codigo }}{% endblock %}
 
 {% block content %}
-<section class="hero">
+<section class="page-head">
     <div>
-        <h1>Pedido {{ pedido.codigo }}</h1>
-        <p>{{ pedido.cliente.nombre }} · entrega {{ pedido.fecha_entrega|date:"d/m/Y H:i" }}</p>
+        <p class="panel-role">Pedido</p>
+        <h1>{{ pedido.codigo }}</h1>
+        <p class="lede">{{ pedido.cliente.nombre }} · entrega {{ pedido.fecha_entrega|date:"d/m/Y H:i" }}</p>
     </div>
     <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
 </section>

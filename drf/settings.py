@@ -32,6 +32,17 @@ CSRF_TRUSTED_ORIGINS = [
     if origen.strip()
 ]
 
+# Nginx termina TLS y reenvía el esquema original en X-Forwarded-Proto.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Actívalo en EC2 cuando la instancia tenga HTTPS (certificado en Nginx).
+# Con HTTP simple debe quedar en False o el navegador no enviará la cookie de sesión.
+SECURE_COOKIES = os.getenv("DJANGO_SECURE_COOKIES", "False").strip().lower() == "true"
+SESSION_COOKIE_SECURE = SECURE_COOKIES
+CSRF_COOKIE_SECURE = SECURE_COOKIES
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -67,6 +78,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "api.context_processors.navegacion",
             ],
         },
     },
