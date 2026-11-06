@@ -18,8 +18,9 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Count, F, Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -30,13 +31,17 @@ from rest_framework.response import Response
 from . import carrito
 from .forms import (
     CheckoutForm,
+    ClienteCuentaForm,
     ConfirmarEntregaForm,
     DespachoForm,
     EstadoForm,
     PagoForm,
+    PedidoDetalleFormSet,
+    PedidoEdicionForm,
     PedidoInternoForm,
     RegistroClienteForm,
     SeguimientoForm,
+    UsuarioInternoForm,
 )
 from .models import (
     CategoriaProducto,
@@ -52,7 +57,14 @@ from .models import (
     Producto,
 )
 from .permissions import EsAdministrador
-from .roles import ROLES_INTERNOS, puede, rol_de
+from .roles import (
+    ROLES_EQUIPO,
+    ROLES_INTERNOS,
+    ROLES_INFO,
+    ROLES_PEDIDOS,
+    puede,
+    rol_de,
+)
 from .serializers import (
     ClienteSerializer,
     DespachoSerializer,
@@ -65,6 +77,21 @@ from .serializers import (
 )
 
 COSTO_DESPACHO = Decimal("3500")
+
+
+def health(request):
+    """Sonda de salud para Nginx/systemd y monitoreo básico."""
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except Exception:
+        return JsonResponse(
+            {"status": "error", "database": "unavailable"}, status=503
+        )
+    return JsonResponse(
+        {"status": "ok", "service": "dulce-arte", "database": "ok"}
+    )
+
 
 # =========================================================================== #
 #  API REST — solo administración
@@ -619,6 +646,8 @@ def home(request):
                 ),
                 "pedidos_hoy": pedidos.filter(fecha_pedido__date=hoy).count(),
                 "nuevos_web": pedidos.filter(canal="web", estado="recibido").count(),
+                "equipo_total": Perfil.objects.exclude(rol="cliente").count(),
+                "clientes_total": Cliente.objects.count(),
                 "ultimos_movimientos": MovimientoInsumo.objects.select_related(
                     "insumo"
                 )[:5],
@@ -769,15 +798,74 @@ def pedido_detalle_page(request, pk):
         messages.error(request, "No tienes acceso a ese pedido.")
         return redirect("mis_pedidos" if rol_de(request.user) == "cliente" else "home")
 
+    rol = rol_de(request.user)
+    pedido.transiciones_visibles = pedido.transiciones_para(rol)
     return render(
         request,
         "pedido_detalle.html",
         {
             "pedido": pedido,
             "es_interno": es_interno,
+            "puede_editar": rol in ROLES_PEDIDOS and not pedido.insumos_descontados,
             "puede_crear_pago": puede(request.user, "admin", "ventas"),
             "pago_form": PagoForm(initial={"tipo": "anticipo"}),
             "estado_form": EstadoForm(),
+        },
+    )
+
+
+@rol_requerido("admin", "ventas")
+def pedido_editar(request, pk):
+    """Edita la cabecera y los productos de un pedido antes del descuento de BOM."""
+    pedido = get_object_or_404(
+        Pedido.objects.select_related("cliente").prefetch_related("detalles__producto"),
+        pk=pk,
+    )
+    if pedido.insumos_descontados:
+        messages.error(
+            request,
+            "Este pedido ya descontó insumos: no se puede editar para no romper "
+            "la trazabilidad del inventario.",
+        )
+        return redirect("pedido_detalle", pk=pedido.pk)
+
+    if request.method == "POST":
+        form = PedidoEdicionForm(request.POST, instance=pedido)
+        formset = PedidoDetalleFormSet(request.POST, instance=pedido)
+        if form.is_valid() and formset.is_valid():
+            vigentes = [
+                detalle
+                for detalle in formset.forms
+                if detalle.cleaned_data
+                and not detalle.cleaned_data.get("DELETE")
+                and detalle.cleaned_data.get("producto")
+            ]
+            if not vigentes:
+                form.add_error(None, "El pedido debe conservar al menos un producto.")
+            else:
+                with transaction.atomic():
+                    form.save()
+                    formset.save()
+                messages.success(
+                    request, f"Pedido {pedido.codigo} actualizado correctamente."
+                )
+                return redirect("pedido_detalle", pk=pedido.pk)
+    else:
+        form = PedidoEdicionForm(instance=pedido)
+        formset = PedidoDetalleFormSet(instance=pedido)
+
+    fecha_minima = timezone.localtime() + timedelta(hours=Pedido.LEAD_TIME_HORAS)
+    form.fields["fecha_entrega"].widget.attrs["min"] = fecha_minima.strftime(
+        "%Y-%m-%dT%H:%M"
+    )
+    return render(
+        request,
+        "pedido_editar.html",
+        {
+            "pedido": pedido,
+            "form": form,
+            "formset": formset,
+            "fecha_minima": fecha_minima,
         },
     )
 
@@ -826,23 +914,132 @@ def pedido_registrar_pago(request, pk):
 
 
 # =========================================================================== #
+#  Panel interno: equipo, clientes y guía de roles
+# =========================================================================== #
+
+
+@rol_requerido(*ROLES_EQUIPO)
+def equipo_page(request):
+    equipo = (
+        Perfil.objects.select_related("user")
+        .exclude(rol="cliente")
+        .order_by("rol", "user__first_name", "user__username")
+    )
+    return render(
+        request,
+        "equipo.html",
+        {
+            "equipo": equipo,
+            "roles_info": ROLES_INFO,
+            "form_usuario": UsuarioInternoForm(),
+            "form_cliente": ClienteCuentaForm(),
+            "clientes": Cliente.objects.select_related("user").order_by("-creado")[:25],
+        },
+    )
+
+
+@rol_requerido(*ROLES_EQUIPO)
+@require_POST
+def equipo_crear_usuario(request):
+    form = UsuarioInternoForm(request.POST)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect("equipo")
+
+    datos = form.cleaned_data
+    with transaction.atomic():
+        user = User.objects.create_user(
+            username=datos["username"],
+            email=datos["email"],
+            password=datos["password1"],
+            first_name=datos["nombre"],
+            last_name=datos["apellido"],
+            is_staff=datos["rol"] == "admin",
+            is_superuser=datos["rol"] == "admin",
+        )
+        Perfil.objects.create(
+            user=user,
+            rol=datos["rol"],
+            telefono=datos["telefono"],
+            turno=datos["turno"],
+            especialidad=datos["especialidad"],
+            zona=datos["zona"],
+            vehiculo=datos["vehiculo"],
+            notas=datos["notas"],
+        )
+
+    messages.success(
+        request,
+        f"Usuario {datos['username']} creado con rol "
+        f"{dict(Perfil.ROLES)[datos['rol']]}.",
+    )
+    return redirect("equipo")
+
+
+@rol_requerido(*ROLES_EQUIPO)
+@require_POST
+def equipo_crear_cliente(request):
+    form = ClienteCuentaForm(request.POST)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect("equipo")
+
+    with transaction.atomic():
+        cliente = form.save()
+        username = (form.cleaned_data.get("username") or "").strip()
+        if username:
+            nombre = cliente.nombre.split(" ", 1)
+            user = User.objects.create_user(
+                username=username,
+                email=cliente.email,
+                password=form.cleaned_data["password1"],
+                first_name=nombre[0],
+                last_name=nombre[1] if len(nombre) > 1 else "",
+            )
+            Perfil.objects.create(
+                user=user, rol="cliente", telefono=cliente.telefono
+            )
+            cliente.user = user
+            cliente.save(update_fields=["user"])
+
+    if cliente.user_id:
+        messages.success(
+            request,
+            f"Cliente {cliente.nombre} creado con cuenta de tienda ({username}).",
+        )
+    else:
+        messages.success(request, f"Ficha de cliente {cliente.nombre} creada.")
+    return redirect("equipo")
+
+
+# =========================================================================== #
 #  Panel interno: producción, inventario y despachos
 # =========================================================================== #
 
 
 @rol_requerido("admin", "cocina", "calidad")
 def kanban_page(request):
+    rol = rol_de(request.user)
     columnas = []
     for clave, etiqueta in Pedido.ESTADOS:
         if clave in ("despachado", "cancelado"):
             continue
+        pedidos_columna = list(
+            Pedido.objects.filter(estado=clave)
+            .select_related("cliente")
+            .order_by("fecha_entrega")
+        )
+        for pedido in pedidos_columna:
+            pedido.transiciones_visibles = pedido.transiciones_para(rol)
         columnas.append(
             {
                 "clave": clave,
                 "etiqueta": etiqueta,
-                "pedidos": Pedido.objects.filter(estado=clave)
-                .select_related("cliente")
-                .order_by("fecha_entrega"),
+                "pedidos": pedidos_columna,
             }
         )
     return render(request, "kanban.html", {"columnas": columnas})

@@ -36,11 +36,61 @@ CLAVE = "Dulce2026!"
 CLAVE_CLIENTE = "Cliente2026!"
 
 USUARIOS = [
-    ("admin", "Administrador", "Dulce Arte", "admin"),
-    ("ventas", "Vendedor", "Mostrador", "ventas"),
-    ("cocina", "Jefa", "de Cocina", "cocina"),
-    ("calidad", "Control", "de Calidad", "calidad"),
-    ("despacho", "Repartidor", "Zona Centro", "despacho"),
+    (
+        "admin",
+        "Administrador",
+        "Dulce Arte",
+        "admin",
+        "completo",
+        "Dirección y gestión",
+        "",
+        "",
+        "Acceso total al panel, Admin y API.",
+    ),
+    (
+        "ventas",
+        "Vendedor",
+        "Mostrador",
+        "ventas",
+        "manana",
+        "Mostrador y cotizaciones",
+        "",
+        "",
+        "Atiende pedidos web, teléfono y pagos.",
+    ),
+    (
+        "cocina",
+        "Jefa",
+        "de Cocina",
+        "cocina",
+        "manana",
+        "Repostería y decoración",
+        "",
+        "",
+        "Responsable de producción y BOM.",
+    ),
+    (
+        "calidad",
+        "Control",
+        "de Calidad",
+        "calidad",
+        "tarde",
+        "Inocuidad y terminación",
+        "",
+        "",
+        "Aprueba el paso a Listo.",
+    ),
+    (
+        "despacho",
+        "Repartidor",
+        "Zona Centro",
+        "despacho",
+        "tarde",
+        "Reparto y entregas",
+        "Temuco centro",
+        "Furgón",
+        "Confirma entregas con evidencia.",
+    ),
 ]
 
 CATEGORIAS_PRODUCTO = {
@@ -51,7 +101,7 @@ CATEGORIAS_PRODUCTO = {
 
 
 def crear_usuarios():
-    for username, nombre, apellido, rol in USUARIOS:
+    for username, nombre, apellido, rol, turno, especialidad, zona, vehiculo, notas in USUARIOS:
         user, creado = User.objects.get_or_create(
             username=username,
             defaults={
@@ -65,7 +115,14 @@ def crear_usuarios():
         if creado:
             user.set_password(CLAVE)
             user.save()
-        Perfil.objects.get_or_create(user=user, defaults={"rol": rol})
+        perfil, _ = Perfil.objects.get_or_create(user=user, defaults={"rol": rol})
+        perfil.rol = rol
+        perfil.turno = perfil.turno or turno
+        perfil.especialidad = perfil.especialidad or especialidad
+        perfil.zona = perfil.zona or zona
+        perfil.vehiculo = perfil.vehiculo or vehiculo
+        perfil.notas = perfil.notas or notas
+        perfil.save()
 
 
 def crear_insumos():
@@ -115,6 +172,7 @@ def crear_productos(insumos):
             "precio": "18990",
             "porciones": 12,
             "categoria": "Tortas",
+            "imagen": "productos/chocolate.jpg",
             "descripcion": "Bizcocho húmedo de chocolate con ganache y decoración personalizada.",
             "bom": [
                 ("Harina sin polvos", "500"),
@@ -129,6 +187,7 @@ def crear_productos(insumos):
             "precio": "15990",
             "porciones": 10,
             "categoria": "Postres",
+            "imagen": "productos/cheesecake.jpg",
             "descripcion": "Base de galleta, crema de queso y cubierta de frutillas frescas.",
             "bom": [
                 ("Harina sin polvos", "250"),
@@ -143,6 +202,7 @@ def crear_productos(insumos):
             "precio": "17990",
             "porciones": 12,
             "categoria": "Tortas",
+            "imagen": "productos/manjar.jpg",
             "descripcion": "Bizcocho clásico relleno de manjar y crema chantilly.",
             "bom": [
                 ("Harina sin polvos", "450"),
@@ -157,6 +217,7 @@ def crear_productos(insumos):
             "precio": "14990",
             "porciones": 10,
             "categoria": "Tortas",
+            "imagen": "productos/zanahoria.jpg",
             "descripcion": "Bizcocho especiado de zanahoria con frosting de queso crema.",
             "bom": [
                 ("Harina sin polvos", "400"),
@@ -170,6 +231,7 @@ def crear_productos(insumos):
             "precio": "12990",
             "porciones": 12,
             "categoria": "Mesas dulces",
+            "imagen": "productos/cupcakes.jpg",
             "descripcion": "Doce cupcakes surtidos con buttercream y decoración temática.",
             "bom": [
                 ("Harina sin polvos", "300"),
@@ -191,11 +253,15 @@ def crear_productos(insumos):
                 "porciones": datos["porciones"],
                 "descripcion": datos["descripcion"],
                 "categoria": categorias[datos["categoria"]],
+                "imagen_estatica": datos["imagen"],
             },
         )
         if producto.categoria_id is None:
             producto.categoria = categorias[datos["categoria"]]
             producto.save(update_fields=["categoria"])
+        if not producto.imagen_estatica:
+            producto.imagen_estatica = datos["imagen"]
+            producto.save(update_fields=["imagen_estatica"])
         for insumo_nombre, cantidad in datos["bom"]:
             RecetaInsumo.objects.get_or_create(
                 producto=producto,

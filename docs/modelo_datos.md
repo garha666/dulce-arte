@@ -25,6 +25,9 @@ Los datos de una entidad no se repiten en otra tabla:
 | Estados del pedido | `HistorialEstado` | trazabilidad: se guarda cada cambio, no solo el último |
 | Consumos de stock | `MovimientoInsumo` | auditoría del descuento y de la reposición por cancelación |
 | Rol del usuario | `Perfil` (1:1 con `User`) | no se altera la tabla de autenticación de Django |
+| Atributos del rol | `Perfil.turno/especialidad/zona/vehiculo` | describen a la persona, no a la cuenta de autenticación |
+| Imagen del producto | `Producto.imagen` o `imagen_estatica` | la subida tiene prioridad; la demo evita depender de `media/` |
+| Permisos de transición | `Pedido.TRANSICIONES_ROL` | política de negocio versionada con el código, no un dato editable |
 | Cuenta del cliente | `Cliente.user` (1:1 opcional) | una ficha puede existir sin cuenta (venta de mostrador) |
 | Pagos del pedido | `Pago` | cada abono tiene monto, método, fecha y responsable propios |
 | Estado de pago y saldo | Se **calculan** desde `Pago` | guardarlos duplicaría un dato derivado y podría desincronizarse |
@@ -59,5 +62,7 @@ Pedido 1───1 Despacho
   de los pedidos existentes.
 - Agenda: `fecha_entrega` se valida contra 48 horas (web), horario 09:00–18:59 de
   `America/Santiago` y cupo de 6 pedidos no cancelados por día, contado con rango de fecha local.
-- Un pedido con `insumos_descontados=True` no se elimina; si se cancela, `reponer_insumos`
-  devuelve el stock con movimientos de tipo entrada.
+- Un pedido con `insumos_descontados=True` no se elimina ni se edita; si se cancela,
+  `reponer_insumos` devuelve el stock con movimientos de tipo entrada.
+- `cambiar_estado` valida el flujo y el rol en `TRANSICIONES_ROL`; el Admin muestra el estado como
+  solo lectura para que no se pueda saltar la máquina de estados.

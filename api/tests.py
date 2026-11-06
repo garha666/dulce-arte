@@ -621,6 +621,21 @@ class PaginasInternasTest(BaseDulceArteTest):
         self.assertEqual(respuesta.status_code, 302)
         self.assertEqual(pedido.total_pagado, Decimal("5000"))
 
+    def test_detalle_muestra_editar_solo_a_admin_y_ventas(self):
+        pedido = self.crear_pedido()
+
+        for usuario, esperado in (
+            ("admin_test", True),
+            ("ventas_test", True),
+            ("cocina_test", False),
+        ):
+            self.client.login(username=usuario, password=CLAVE)
+            respuesta = self.client.get(
+                reverse("pedido_detalle", args=[pedido.pk])
+            )
+            self.assertEqual(respuesta.status_code, 200, usuario)
+            self.assertIs(respuesta.context["puede_editar"], esperado, usuario)
+
 
 class FrontendSeguridadTest(SimpleTestCase):
     def test_panel_interno_no_usa_la_api(self):
@@ -634,3 +649,166 @@ class FrontendSeguridadTest(SimpleTestCase):
         js = Path(settings.BASE_DIR) / "static" / "js"
         self.assertFalse((js / "pedidos.js").exists())
         self.assertFalse((js / "kanban.js").exists())
+
+
+class PermisosPorRolTest(BaseDulceArteTest):
+    def test_ventas_no_inicia_preparacion(self):
+        pedido = self.crear_pedido()
+        self.confirmar(pedido)
+
+        with self.assertRaises(ValidationError):
+            pedido.cambiar_estado("preparacion", usuario=self.ventas)
+
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "confirmado")
+
+    def test_cocina_no_confirma_pedidos(self):
+        pedido = self.crear_pedido()
+        self.pagar(pedido)
+
+        with self.assertRaises(ValidationError):
+            pedido.cambiar_estado("confirmado", usuario=self.cocina)
+
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "recibido")
+
+    def test_transiciones_visibles_por_rol(self):
+        pedido = self.crear_pedido()
+        self.assertEqual(
+            [clave for clave, _ in pedido.transiciones_para("ventas")],
+            ["confirmado", "cancelado"],
+        )
+        self.assertEqual(pedido.transiciones_para("cocina"), [])
+
+        self.confirmar(pedido)
+        self.assertEqual(
+            [clave for clave, _ in pedido.transiciones_para("cocina")],
+            ["preparacion"],
+        )
+
+
+class EquipoTest(BaseDulceArteTest):
+    def test_solo_admin_entra_a_equipo(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        self.assertEqual(self.client.get(reverse("equipo")).status_code, 302)
+
+        self.client.login(username="admin_test", password=CLAVE)
+        self.assertEqual(self.client.get(reverse("equipo")).status_code, 200)
+
+    def test_admin_crea_usuario_interno_con_atributos(self):
+        self.client.login(username="admin_test", password=CLAVE)
+        respuesta = self.client.post(
+            reverse("equipo_crear_usuario"),
+            {
+                "nombre": "Nueva",
+                "apellido": "Repostera",
+                "username": "repostera",
+                "email": "repostera@test.cl",
+                "telefono": "+56955555555",
+                "rol": "cocina",
+                "turno": "manana",
+                "especialidad": "Decoración",
+                "zona": "",
+                "vehiculo": "",
+                "notas": "Refuerzo de fin de semana",
+                "password1": "Secreta2026!",
+                "password2": "Secreta2026!",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        user = User.objects.get(username="repostera")
+        self.assertEqual(user.perfil.rol, "cocina")
+        self.assertEqual(user.perfil.turno, "manana")
+        self.assertEqual(user.perfil.especialidad, "Decoración")
+
+    def test_admin_crea_cliente_con_cuenta(self):
+        self.client.login(username="admin_test", password=CLAVE)
+        respuesta = self.client.post(
+            reverse("equipo_crear_cliente"),
+            {
+                "nombre": "Cliente Nuevo",
+                "telefono": "+56944444444",
+                "email": "nuevo@test.cl",
+                "direccion": "Calle 1",
+                "username": "nuevo_cliente",
+                "password1": "Secreta2026!",
+                "password2": "Secreta2026!",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        cliente = Cliente.objects.get(nombre="Cliente Nuevo")
+        self.assertEqual(cliente.user.username, "nuevo_cliente")
+        self.assertEqual(cliente.user.perfil.rol, "cliente")
+
+
+class EdicionPedidoTest(BaseDulceArteTest):
+    def _datos_edicion(self, pedido, detalle, **cambios):
+        datos = {
+            "cliente": pedido.cliente_id,
+            "canal": "mostrador",
+            "modalidad": "retiro",
+            "fecha_entrega": fecha_valida().strftime("%Y-%m-%dT%H:%M"),
+            "direccion_entrega": "",
+            "telefono_contacto": "+56900000000",
+            "descripcion_diseno": "Diseño actualizado",
+            "costo_despacho": "0",
+            "observaciones": "",
+            "retirado_por": "",
+            "detalles-TOTAL_FORMS": "1",
+            "detalles-INITIAL_FORMS": "1",
+            "detalles-MIN_NUM_FORMS": "0",
+            "detalles-MAX_NUM_FORMS": "1000",
+            "detalles-0-id": detalle.pk,
+            "detalles-0-producto": self.producto.pk,
+            "detalles-0-cantidad": "2",
+            "detalles-0-precio_unitario": "10000",
+            "detalles-0-personalizacion": "Sin nueces",
+        }
+        datos.update(cambios)
+        return datos
+
+    def test_admin_edita_pedido_antes_del_bom(self):
+        pedido = self.crear_pedido()
+        detalle = pedido.detalles.get()
+        self.client.login(username="admin_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("pedido_editar", args=[pedido.pk]),
+            self._datos_edicion(pedido, detalle),
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        pedido.refresh_from_db()
+        detalle.refresh_from_db()
+        self.assertEqual(pedido.descripcion_diseno, "Diseño actualizado")
+        self.assertEqual(detalle.cantidad, 2)
+
+    def test_no_edita_pedido_con_insumos_descontados(self):
+        pedido = self.crear_pedido()
+        self.confirmar(pedido)
+        pedido.cambiar_estado("preparacion", usuario=self.cocina)
+        self.client.login(username="admin_test", password=CLAVE)
+
+        respuesta = self.client.get(reverse("pedido_editar", args=[pedido.pk]))
+
+        self.assertEqual(respuesta.status_code, 302)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.descripcion_diseno, "")
+
+
+class ImagenYHealthTest(BaseDulceArteTest):
+    def test_producto_usa_imagen_de_demostracion(self):
+        self.assertEqual(
+            self.producto.imagen_url, "/static/IMAGES/productos/default.jpg"
+        )
+        self.producto.imagen_estatica = "productos/chocolate.jpg"
+        self.assertEqual(
+            self.producto.imagen_url, "/static/IMAGES/productos/chocolate.jpg"
+        )
+
+    def test_health_responde_ok(self):
+        respuesta = self.client.get(reverse("health"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["status"], "ok")

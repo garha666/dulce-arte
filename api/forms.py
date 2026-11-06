@@ -6,8 +6,10 @@ recogen los datos y delegan en `full_clean`.
 
 from django import forms
 from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.forms import inlineformset_factory
 
-from .models import Despacho, Pago, Pedido, Producto
+from .models import Cliente, Despacho, Pago, Pedido, PedidoDetalle, Perfil, Producto
 
 DATE_INPUT = forms.DateTimeInput(
     attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
@@ -180,3 +182,168 @@ class SeguimientoForm(forms.Form):
         label="Código o enlace de seguimiento",
         widget=forms.TextInput(attrs={"placeholder": "PED-00042"}),
     )
+
+
+class UsuarioInternoForm(forms.Form):
+    """Alta de un usuario del equipo interno desde el panel de gestión."""
+
+    ROLES_INTERNOS = [
+        (clave, etiqueta)
+        for clave, etiqueta in Perfil.ROLES
+        if clave != "cliente"
+    ]
+
+    nombre = forms.CharField(max_length=60, label="Nombre")
+    apellido = forms.CharField(max_length=60, label="Apellido")
+    username = forms.CharField(max_length=30, label="Usuario")
+    email = forms.EmailField(label="Correo")
+    telefono = forms.CharField(max_length=20, required=False, label="Teléfono")
+    rol = forms.ChoiceField(choices=ROLES_INTERNOS, label="Rol")
+    turno = forms.ChoiceField(
+        choices=[("", "Sin turno definido"), *Perfil.TURNOS],
+        required=False,
+        label="Turno",
+    )
+    especialidad = forms.CharField(
+        max_length=80,
+        required=False,
+        label="Especialidad",
+        widget=forms.TextInput(attrs={"placeholder": "Repostería, reparto, control…"}),
+    )
+    zona = forms.CharField(
+        max_length=80,
+        required=False,
+        label="Zona",
+        widget=forms.TextInput(attrs={"placeholder": "Solo despacho"}),
+    )
+    vehiculo = forms.CharField(
+        max_length=60,
+        required=False,
+        label="Vehículo",
+        widget=forms.TextInput(attrs={"placeholder": "Solo despacho"}),
+    )
+    notas = forms.CharField(
+        max_length=200,
+        required=False,
+        label="Notas",
+        widget=forms.TextInput(attrs={"placeholder": "Observaciones del equipo"}),
+    )
+    password1 = forms.CharField(widget=forms.PasswordInput, label="Contraseña")
+    password2 = forms.CharField(
+        widget=forms.PasswordInput, label="Repetir contraseña"
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("Ese usuario ya está en uso.")
+        return username
+
+    def clean_email(self):
+        email = self.cleaned_data["email"].strip().lower()
+        if User.objects.filter(email__iexact=email).exists():
+            raise forms.ValidationError("Ya existe una cuenta con ese correo.")
+        return email
+
+    def clean(self):
+        datos = super().clean()
+        clave = datos.get("password1")
+        if clave and clave != datos.get("password2"):
+            self.add_error("password2", "Las contraseñas no coinciden.")
+        if clave:
+            try:
+                validate_password(clave)
+            except forms.ValidationError as error:
+                self.add_error("password1", error)
+        rol = datos.get("rol")
+        if rol != "despacho":
+            datos["zona"] = ""
+            datos["vehiculo"] = ""
+        return datos
+
+
+class ClienteCuentaForm(forms.ModelForm):
+    """Ficha de cliente con cuenta de tienda opcional."""
+
+    username = forms.CharField(
+        max_length=30,
+        required=False,
+        label="Usuario (opcional)",
+        help_text="Déjalo vacío para crear solo la ficha de mostrador.",
+    )
+    password1 = forms.CharField(
+        widget=forms.PasswordInput, required=False, label="Contraseña"
+    )
+    password2 = forms.CharField(
+        widget=forms.PasswordInput, required=False, label="Repetir contraseña"
+    )
+
+    class Meta:
+        model = Cliente
+        fields = ("nombre", "telefono", "email", "direccion")
+        widgets = {"direccion": forms.TextInput(attrs={"placeholder": "Calle y número"})}
+
+    def clean(self):
+        datos = super().clean()
+        username = (datos.get("username") or "").strip()
+        clave = datos.get("password1")
+        if username:
+            if User.objects.filter(username__iexact=username).exists():
+                self.add_error("username", "Ese usuario ya está en uso.")
+            if not clave:
+                self.add_error(
+                    "password1", "Indica una contraseña para crear la cuenta."
+                )
+            elif clave != datos.get("password2"):
+                self.add_error("password2", "Las contraseñas no coinciden.")
+            elif not (datos.get("email") or "").strip():
+                self.add_error(
+                    "email", "La cuenta de tienda necesita un correo."
+                )
+            elif User.objects.filter(
+                email__iexact=datos["email"].strip()
+            ).exists():
+                self.add_error(
+                    "email", "Ya existe una cuenta con ese correo."
+                )
+        return datos
+
+
+class PedidoEdicionForm(forms.ModelForm):
+    """Edición de la cabecera de un pedido (no cambia el estado)."""
+
+    class Meta:
+        model = Pedido
+        fields = (
+            "cliente",
+            "canal",
+            "modalidad",
+            "fecha_entrega",
+            "direccion_entrega",
+            "telefono_contacto",
+            "descripcion_diseno",
+            "costo_despacho",
+            "observaciones",
+            "retirado_por",
+        )
+        widgets = {
+            "fecha_entrega": DATE_INPUT,
+            "descripcion_diseno": forms.Textarea(attrs={"rows": 3}),
+            "observaciones": forms.Textarea(attrs={"rows": 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["fecha_entrega"].input_formats = ["%Y-%m-%dT%H:%M"]
+        self.fields["cliente"].queryset = Cliente.objects.order_by("nombre")
+
+
+PedidoDetalleFormSet = inlineformset_factory(
+    Pedido,
+    PedidoDetalle,
+    fields=("producto", "cantidad", "precio_unitario", "personalizacion"),
+    extra=1,
+    can_delete=True,
+    widgets={"personalizacion": forms.Textarea(attrs={"rows": 2})},
+)
+

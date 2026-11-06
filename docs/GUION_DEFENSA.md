@@ -14,7 +14,7 @@ python seed_data.py
 python manage.py runserver
 ```
 
-- Abrir `http://127.0.0.1:8000/` y dejar pestañas con `/tienda/`, `/admin/` y `/api/`.
+- Abrir `http://127.0.0.1:8000/` y dejar pestañas con `/tienda/`, `/equipo/`, `/admin/` y `/api/`.
 - Usuario interno `admin` / `Dulce2026!`; cliente demo `cliente` / `Cliente2026!`.
 - Tener a mano `api/models.py`, `api/views.py`, `api/carrito.py` y `api/forms.py`.
 
@@ -31,7 +31,8 @@ python manage.py runserver
 ## 2. Tienda pública y carrito (2 min)
 
 1. Abrir `/` → landing con productos y los pasos del pedido.
-2. Ir a `/tienda/` → filtrar por categoría y mostrar la disponibilidad calculada.
+2. Ir a `/tienda/` → filtrar por categoría, mostrar las fotos del catálogo y la disponibilidad
+   calculada.
 3. Abrir un producto → ingredientes de la receta y campo de personalización.
 4. Agregar al carrito con cantidad y una dedicatoria; abrir `/carrito/`.
 5. Cambiar la cantidad y mostrar que el subtotal se recalcula.
@@ -40,6 +41,10 @@ python manage.py runserver
 > el stock de los insumos de su receta; si no alcanza para una unidad, el producto aparece sin
 > stock y no se puede agregar. El carrito vive en la sesión (`api/carrito.py`) y **nunca**
 > guarda el precio: cada vez que se muestra se lee el precio vigente del catálogo."
+
+> "Las fotos vienen de `static/IMAGES/productos/` para que el catálogo se vea real desde la
+> primera ejecución. En el Admin se puede subir una foto propia por producto; `Producto.imagen_url`
+> prioriza la subida y usa la demo solo como respaldo."
 
 ## 3. Checkout y agenda (2 min)
 
@@ -76,6 +81,8 @@ python manage.py runserver
 4. Intentar pasarlo a **Confirmado** sin pago → error.
 5. Registrar un pago (efectivo o transferencia) y luego confirmar.
 6. Mostrar el cambio de estado y el historial con usuario y fecha.
+7. Abrir **Editar pedido** → cambiar cantidad o dirección y guardar; luego mostrar que el botón
+   desaparece cuando el pedido ya descontó insumos.
 
 > "El pedido no entra a producción sin pago. `Pago` es un registro real con monto, método, tipo
 > y responsable; `total_pagado`, `estado_pago` y `saldo` se calculan desde esos registros. El
@@ -107,17 +114,22 @@ python manage.py runserver
 > receptor y firma o comprobante (`Despacho.clean`), y el retiro exige `retirado_por`. Ambas
 > transiciones son atómicas y quedan en el historial."
 
-## 8. API administrativa y cierre técnico (1 min)
+## 8. Equipo, roles, Admin y API (2 min)
 
-1. `/admin/` → cabecera, filtros, inlines del detalle y del BOM, y pagos.
-2. `/api/` → navegador DRF con sesión de `admin`.
-3. Cerrar sesión, entrar como `ventas` y abrir `/api/pedidos/` → **403**.
-4. Mostrar que `/pedidos/` y `/kanban/` funcionan por formularios, sin `fetch`.
+1. `/equipo/` → mostrar la guía de roles (responsabilidades, permisos, límites y transiciones) y
+   crear un usuario de cocina con turno y especialidad, o un cliente con cuenta.
+2. `/admin/` → cabecera, filtros, inlines del detalle y del BOM, pagos y miniatura de producto.
+3. En el Admin de usuarios, abrir un usuario → el perfil y el rol se editan en la misma pantalla.
+4. `/api/` → navegador DRF con sesión de `admin`.
+5. Cerrar sesión, entrar como `ventas` y abrir `/api/pedidos/` → **403**.
+6. Mostrar que `/pedidos/` y `/kanban/` funcionan por formularios, sin `fetch`.
 
-> "La API es solo para administración: `EsAdministrador` es el permiso global de DRF, así que
-> ventas, cocina, calidad, despacho y cliente reciben 403. El panel interno no usa la API ni
-> `fetch`; todo se valida en el modelo y se renderiza en el servidor. Hay una prueba
-> (`FrontendSeguridadTest`) que falla si un template interno vuelve a usar `/api/`."
+> "Cada rol tiene atributos y permisos concretos. `Pedido.TRANSICIONES_ROL` es la única fuente de
+> verdad: cocina no puede confirmar, ventas no puede iniciar producción, calidad aprueba y
+> despacho entrega. El panel solo muestra las transiciones que el rol puede ejecutar y el modelo
+> vuelve a validarlas, así que ocultar un botón no es la seguridad. La API es solo para
+> administración: `EsAdministrador` cierra el resto con 403. Ningún template interno usa `/api/`
+> ni `fetch`."
 
 ## 9. Modelo, verificación y cierre (1 min)
 
@@ -127,7 +139,7 @@ python manage.py runserver
 
 ```powershell
 python manage.py check
-python manage.py test api      # 43 pruebas
+python manage.py test api      # 54 pruebas
 python smoke_test.py           # no deja datos
 ```
 
@@ -149,5 +161,8 @@ python smoke_test.py           # no deja datos
 | ¿Por qué el carrito no está en la base? | Se puede comprar sin cuenta; guardarlo en sesión evita tablas y limpieza de carritos abandonados. El precio se lee siempre del catálogo. |
 | ¿Por qué PostgreSQL y no SQLite? | Requisito del ramo; además soporta concurrencia y `select_for_update`, que SQLite no. |
 | ¿Qué pasa si dos usuarios mueven el pedido a la vez? | El flujo se valida contra el estado actual y el descuento bloquea las filas de insumos. |
+| ¿Los roles son solo etiquetas? | No: `TRANSICIONES_ROL` limita cada avance y `cambiar_estado` valida el rol en el modelo; además cada rol tiene menú y páginas propias. |
+| ¿Cómo se agregan fotos a los productos? | En el Admin (`Producto → Imagen del catálogo`) o con la ruta demo `imagen_estatica`; `imagen_url` resuelve la prioridad. |
+| ¿Se puede editar un pedido ya producido? | No: al descontar insumos se bloquea la edición para no romper la trazabilidad; primero se cancela (repone) y se crea otro. |
 | ¿Cómo se despliega? | EC2 Ubuntu, Postgres local, venv, `migrate`, `collectstatic`, Gunicorn en socket Unix y Nginx. |
 | ¿Qué mejorarías? | Impedir pagos que superen el saldo, notificaciones automáticas, facturación electrónica y tests de carga. |

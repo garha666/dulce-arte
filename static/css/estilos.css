@@ -655,6 +655,13 @@ p { margin: 0; }
     outline: 3px solid rgba(166, 44, 78, .16);
     border-color: var(--frambuesa);
 }
+.form input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    background: none;
+}
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-msg { font-size: .84rem; color: var(--suave); min-height: 1.2em; }
 
@@ -950,6 +957,77 @@ p { margin: 0; }
 .panel-summary::-webkit-details-marker { display: none; }
 .panel-summary h2 { display: inline; }
 .estado-confirmado { background: #eef0e8; color: #5c6b4a; border-color: #dde2d1; }
+
+/* ------------------------------------------------------- gestión de equipo */
+.quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+}
+.quick-action {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 14px 16px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: var(--crema);
+    color: var(--cacao);
+    text-decoration: none;
+    transition: border-color .15s ease, background .15s ease;
+}
+.quick-action:hover { border-color: var(--borde-fuerte); background: #fdf8f1; text-decoration: none; }
+.quick-action strong { font-family: var(--display); font-size: 1.35rem; color: var(--tinta); }
+.quick-action span { font-size: .78rem; color: var(--suave); }
+
+.role-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+}
+.role-card {
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    padding: 16px 18px;
+    background: #fffdf9;
+    border-top: 4px solid var(--borde-fuerte);
+}
+.role-card header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.role-card h3 { font-size: 1.08rem; }
+.role-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--frambuesa); flex-shrink: 0; }
+.role-summary { font-size: .87rem; color: var(--cacao); }
+.role-attrs { margin-top: 8px; font-size: .78rem; color: var(--suave); }
+.role-key { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--borde); font-size: .76rem; color: var(--suave); }
+.role-details { margin-top: 10px; font-size: .82rem; }
+.role-details summary { cursor: pointer; font-weight: 700; color: var(--frambuesa-oscura); }
+.role-details h4 { margin: 10px 0 2px; font-family: var(--texto); font-size: .76rem; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); }
+.role-details ul { margin: 0; padding-left: 18px; }
+.role-details li { padding: 2px 0; color: var(--cacao); }
+.role-transitions li { font-size: .78rem; }
+
+.role-admin { border-top-color: var(--tinta); }
+.role-ventas { border-top-color: var(--frambuesa); }
+.role-cocina { border-top-color: var(--caramelo); }
+.role-calidad { border-top-color: #6f4f96; }
+.role-despacho { border-top-color: #3c7488; }
+.role-cliente { border-top-color: var(--pistacho); }
+.role-admin .role-dot { background: var(--tinta); }
+.role-ventas .role-dot { background: var(--frambuesa); }
+.role-cocina .role-dot { background: var(--caramelo); }
+.role-calidad .role-dot { background: #6f4f96; }
+.role-despacho .role-dot { background: #3c7488; }
+.role-cliente .role-dot { background: var(--pistacho); }
+
+.rol-badge { background: var(--crema); }
+.rol-badge.rol-admin { background: var(--tinta); color: var(--crema); border-color: var(--tinta); }
+.rol-badge.rol-ventas { background: #f8e3e5; color: var(--frambuesa-oscura); border-color: #efcdd2; }
+.rol-badge.rol-cocina { background: #fbf0dc; color: #9a651f; border-color: #f0dfbf; }
+.rol-badge.rol-calidad { background: #f0e9f7; color: #6f4f96; border-color: #e0d3ee; }
+.rol-badge.rol-despacho { background: #e4eff3; color: #3c7488; border-color: #cfe2e8; }
+.rol-badge.rol-cliente { background: #e9f1e5; color: var(--pistacho); border-color: #d5e3cc; }
+
+.role-details[open] summary { margin-bottom: 6px; }
+
 
 /* ---------------------------------------------------------------- responsive */
 @media (max-width: 980px) {

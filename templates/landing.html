@@ -43,6 +43,9 @@
     <div class="product-grid">
         {% for producto in productos %}
         <article class="product">
+            <a class="product-media" href="{% url 'producto_detalle' producto.pk %}" aria-hidden="true" tabindex="-1">
+                <img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}">
+            </a>
             <div class="product-head">
                 <h3>{{ producto.nombre }}</h3>
                 <span class="product-price">${{ producto.precio_base|floatformat:"0g" }}</span>

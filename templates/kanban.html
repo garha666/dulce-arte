@@ -37,7 +37,7 @@
             <p class="kanban-total">${{ pedido.total|floatformat:0 }}</p>
 
             <div class="kanban-actions">
-                {% for clave, etiqueta in pedido.transiciones_disponibles %}
+                {% for clave, etiqueta in pedido.transiciones_visibles %}
                     <form method="post" action="{% url 'pedido_cambiar_estado' pedido.pk %}">
                         {% csrf_token %}
                         <input type="hidden" name="estado" value="{{ clave }}">
@@ -48,6 +48,8 @@
                             {{ etiqueta }}
                         </button>
                     </form>
+                {% empty %}
+                    <span class="muted small">Sin acciones para tu rol.</span>
                 {% endfor %}
             </div>
         </article>

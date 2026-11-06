@@ -16,6 +16,7 @@ router.register(r"movimientos", views.MovimientoInsumoViewSet)
 
 urlpatterns = [
     # ------------------------------------------------------------- sesión
+    path("health/", views.health, name="health"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
     path("registro/", views.registro, name="registro"),
@@ -45,6 +46,11 @@ urlpatterns = [
     path("pedidos/nuevo/", views.pedido_crear, name="pedido_crear"),
     path("pedidos/<int:pk>/", views.pedido_detalle_page, name="pedido_detalle"),
     path(
+        "pedidos/<int:pk>/editar/",
+        views.pedido_editar,
+        name="pedido_editar",
+    ),
+    path(
         "pedidos/<int:pk>/estado/",
         views.pedido_cambiar_estado,
         name="pedido_cambiar_estado",
@@ -56,6 +62,17 @@ urlpatterns = [
     ),
     path("pedidos/<int:pk>/retiro/", views.retiro_confirmar, name="retiro_confirmar"),
     path("inventario/", views.inventario_page, name="inventario"),
+    path("equipo/", views.equipo_page, name="equipo"),
+    path(
+        "equipo/usuarios/nuevo/",
+        views.equipo_crear_usuario,
+        name="equipo_crear_usuario",
+    ),
+    path(
+        "equipo/clientes/nuevo/",
+        views.equipo_crear_cliente,
+        name="equipo_crear_cliente",
+    ),
     path("despachos/", views.despachos_page, name="despachos"),
     path("despachos/crear/", views.despacho_crear, name="despacho_crear"),
     path(

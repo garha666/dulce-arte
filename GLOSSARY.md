@@ -112,6 +112,18 @@ _Avoid_: Comprobante, respaldo
 Conjunto de pantallas server-side para ventas, cocina, calidad y despacho.
 _Avoid_: Backoffice, dashboard, administración
 
+**Perfil**:
+Ficha del usuario que define su rol y atributos operativos (turno, especialidad, zona, vehículo).
+_Avoid_: Cuenta, cargo
+
+**Transición permitida**:
+Cambio de estado que el rol del usuario puede ejecutar sobre un pedido.
+_Avoid_: Movimiento, avance libre
+
+**Guía de roles**:
+Pantalla `/equipo/` que explica responsabilidades, permisos y límites de cada rol.
+_Avoid_: Manual, ayuda genérica
+
 **Tienda**:
 Sitio público de catálogo, carrito, checkout, seguimiento y cuenta de cliente.
 _Avoid_: E-commerce, frontend

@@ -34,11 +34,37 @@ class Perfil(models.Model):
         ("cliente", "Cliente"),
     ]
 
+    TURNOS = [
+        ("manana", "Mañana (09:00–14:00)"),
+        ("tarde", "Tarde (14:00–19:00)"),
+        ("completo", "Jornada completa"),
+        ("part-time", "Part-time / refuerzo"),
+    ]
+
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="perfil"
     )
     rol = models.CharField(max_length=20, choices=ROLES, default="cliente")
     telefono = models.CharField(max_length=20, blank=True)
+    turno = models.CharField(max_length=20, choices=TURNOS, blank=True)
+    especialidad = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Ej.: repostería, decoración, control de calidad, reparto.",
+    )
+    zona = models.CharField(
+        max_length=80,
+        blank=True,
+        help_text="Solo despacho: sector o comuna asignada.",
+    )
+    vehiculo = models.CharField(
+        max_length=60,
+        blank=True,
+        help_text="Solo despacho: furgón, moto, bicicleta u otro.",
+    )
+    notas = models.CharField(
+        max_length=200, blank=True, help_text="Observaciones del equipo."
+    )
 
     class Meta:
         verbose_name = "Perfil de usuario"
@@ -46,6 +72,18 @@ class Perfil(models.Model):
 
     def __str__(self):
         return f"{self.user.get_full_name() or self.user.username} ({self.get_rol_display()})"
+
+    @property
+    def resumen(self):
+        """Línea corta con los atributos operativos del rol."""
+        partes = [self.get_rol_display()]
+        if self.especialidad:
+            partes.append(self.especialidad)
+        if self.zona:
+            partes.append(self.zona)
+        if self.turno:
+            partes.append(self.get_turno_display())
+        return " · ".join(partes)
 
 
 # --------------------------------------------------------------------------- #
@@ -131,6 +169,14 @@ class Producto(models.Model):
     porciones = models.PositiveSmallIntegerField(default=1)
     activo = models.BooleanField(default=True)
     imagen = models.ImageField(upload_to="productos/", blank=True, null=True)
+    imagen_estatica = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text=(
+            "Imagen de demostración dentro de static/IMAGES "
+            "(ej. productos/chocolate.jpg). Se usa si no hay archivo subido."
+        ),
+    )
     categoria = models.ForeignKey(
         CategoriaProducto,
         on_delete=models.SET_NULL,
@@ -146,6 +192,24 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    @property
+    def imagen_url(self):
+        """Imagen subida por el admin o, si no hay, la de demostración."""
+        from django.templatetags.static import static
+
+        if self.imagen:
+            return self.imagen.url
+        if self.imagen_estatica:
+            ruta = self.imagen_estatica
+            if not ruta.startswith("IMAGES/"):
+                ruta = f"IMAGES/{ruta}"
+            return static(ruta)
+        return static("IMAGES/productos/default.jpg")
+
+    @property
+    def tiene_imagen(self):
+        return bool(self.imagen or self.imagen_estatica)
 
     @property
     def unidades_disponibles(self):
@@ -265,6 +329,36 @@ class Pedido(models.Model):
         "despachado": ["entregado"],
         "entregado": [],
         "cancelado": [],
+    }
+
+    # Qué rol puede ejecutar cada transición. El admin siempre está incluido.
+    TRANSICIONES_ROL = {
+        "recibido": {
+            "confirmado": ("admin", "ventas"),
+            "cancelado": ("admin", "ventas"),
+        },
+        "confirmado": {
+            "preparacion": ("admin", "cocina"),
+            "cancelado": ("admin", "ventas"),
+        },
+        "preparacion": {
+            "horneado": ("admin", "cocina"),
+            "cancelado": ("admin", "ventas"),
+        },
+        "horneado": {
+            "calidad": ("admin", "cocina"),
+            "cancelado": ("admin", "ventas"),
+        },
+        "calidad": {
+            "listo": ("admin", "calidad"),
+            "preparacion": ("admin", "calidad", "cocina"),
+        },
+        "listo": {
+            "despachado": ("admin", "despacho"),
+            "entregado": ("admin", "despacho", "ventas"),
+            "cancelado": ("admin", "ventas"),
+        },
+        "despachado": {"entregado": ("admin", "despacho")},
     }
 
     CANALES = [
@@ -449,6 +543,15 @@ class Pedido(models.Model):
             for estado in self.TRANSICIONES.get(self.estado, [])
         ]
 
+    def transiciones_para(self, rol):
+        """Transiciones que el rol indicado puede ejecutar desde el estado actual."""
+        permitidas = self.TRANSICIONES_ROL.get(self.estado, {})
+        return [
+            (estado, dict(self.ESTADOS)[estado])
+            for estado in self.TRANSICIONES.get(self.estado, [])
+            if rol in permitidas.get(estado, ())
+        ]
+
     @transaction.atomic
     def descontar_insumos(self, usuario=None):
         """Descuenta del inventario los insumos que consume el pedido (BOM)."""
@@ -527,6 +630,21 @@ class Pedido(models.Model):
                 f"Transición no permitida: {self.get_estado_display()} → "
                 f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}."
             )
+
+        if usuario is not None:
+            from .roles import rol_de
+
+            roles_permitidos = self.TRANSICIONES_ROL.get(self.estado, {}).get(
+                nuevo_estado
+            )
+            rol = rol_de(usuario)
+            if roles_permitidos is not None and rol not in roles_permitidos:
+                raise ValidationError(
+                    "Tu rol no puede mover el pedido de "
+                    f"{self.get_estado_display()} a "
+                    f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}. "
+                    "Esta acción corresponde a otro equipo."
+                )
 
         if nuevo_estado == "confirmado":
             if self.estado_pago == "pendiente":

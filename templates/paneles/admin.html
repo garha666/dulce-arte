@@ -21,6 +21,31 @@
     </article>
 </section>
 
+<section class="panel">
+    <div class="panel-title">
+        <h2>Gestión rápida</h2>
+        <a class="link" href="{% url 'equipo' %}">Abrir equipo y roles</a>
+    </div>
+    <div class="quick-actions">
+        <a class="quick-action" href="{% url 'equipo' %}">
+            <strong>{{ equipo_total }}</strong>
+            <span>Usuarios internos</span>
+        </a>
+        <a class="quick-action" href="{% url 'equipo' %}">
+            <strong>{{ clientes_total }}</strong>
+            <span>Clientes registrados</span>
+        </a>
+        <a class="quick-action" href="/admin/api/producto/" target="_blank" rel="noopener">
+            <strong>Productos</strong>
+            <span>Catálogo, precios e imágenes</span>
+        </a>
+        <a class="quick-action" href="/admin/api/pedido/" target="_blank" rel="noopener">
+            <strong>Pedidos</strong>
+            <span>Edición avanzada en Admin</span>
+        </a>
+    </div>
+</section>
+
 <section class="grid-2">
     <div class="panel">
         <div class="panel-title">

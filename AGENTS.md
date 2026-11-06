@@ -52,6 +52,6 @@ Desarrollo Backend.
 
 ## Verificación
 - `python manage.py check` sin errores.
-- `python manage.py test api`: 43 pruebas OK.
-- `python smoke_test.py`: tienda y panel 200, API 403 para roles operativos, descuento y
-  reposición de stock con rollback.
+- `python manage.py test api`: 54 pruebas OK.
+- `python smoke_test.py`: tienda, panel y `/equipo/` 200; API 403 para roles operativos; descuento
+  y reposición de stock con rollback.

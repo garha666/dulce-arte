@@ -33,11 +33,7 @@
     {% for producto in productos %}
     <article class="product product-card">
         <a class="product-media" href="{% url 'producto_detalle' producto.pk %}" aria-hidden="true" tabindex="-1">
-            {% if producto.imagen %}
-                <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}">
-            {% else %}
-                <span class="product-media-placeholder">{{ producto.nombre|first }}</span>
-            {% endif %}
+            <img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}">
         </a>
 
         <div class="product-head">
@@ -56,7 +52,7 @@
             {% if producto.unidades_disponibles is None %}
                 <span class="badge badge-ok">Disponible</span>
             {% elif producto.disponible %}
-                <span class="badge badge-ok">{{ producto.unidades_disponibles }} disponibles hoy</span>
+                <span class="badge badge-ok">{{ producto.unidades_disponibles }} disponible{{ producto.unidades_disponibles|pluralize }} hoy</span>
             {% else %}
                 <span class="badge badge-danger">Sin stock</span>
             {% endif %}

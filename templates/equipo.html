@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Equipo y roles{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Administración</p>
+        <h1>Equipo y roles</h1>
+        <p class="lede">
+            Cada persona entra con su propio usuario y ve solo lo que su rol necesita.
+            Aquí puedes crear usuarios internos, fichas de clientes y revisar qué hace
+            cada rol en la operación.
+        </p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-ghost" href="/admin/api/producto/" target="_blank" rel="noopener">Productos (Admin)</a>
+        <a class="btn btn-ghost" href="/admin/api/pedido/" target="_blank" rel="noopener">Pedidos (Admin)</a>
+        <a class="btn btn-solid" href="{% url 'pedidos' %}">Ir al panel de pedidos</a>
+    </div>
+</section>
+
+<section class="panel">
+    <div class="panel-title">
+        <h2>Guía de roles</h2>
+        <span class="muted small">Permisos tomados del flujo real del pedido</span>
+    </div>
+    <div class="role-grid">
+        {% for clave, info in roles_info.items %}
+        <article class="role-card role-{{ clave }}">
+            <header>
+                <span class="role-dot" aria-hidden="true"></span>
+                <h3>{{ info.etiqueta }}</h3>
+            </header>
+            <p class="role-summary">{{ info.resumen }}</p>
+            <p class="role-attrs"><strong>Atributos:</strong> {{ info.atributos|join:" · " }}</p>
+
+            <details class="role-details">
+                <summary>Qué hace y qué no puede hacer</summary>
+                <h4>Responsabilidades</h4>
+                <ul>
+                    {% for item in info.responsabilidades %}<li>{{ item }}</li>{% endfor %}
+                </ul>
+                <h4>Permisos</h4>
+                <ul>
+                    {% for item in info.permisos %}<li>{{ item }}</li>{% endfor %}
+                </ul>
+                <h4>Límites</h4>
+                <ul>
+                    {% for item in info.limites %}<li>{{ item }}</li>{% endfor %}
+                </ul>
+                <h4>Transiciones del pedido</h4>
+                <ul class="role-transitions">
+                    {% for item in info.transiciones %}<li>{{ item }}</li>{% empty %}<li>No mueve pedidos.</li>{% endfor %}
+                </ul>
+            </details>
+
+            <p class="role-key">{{ info.atributo_clave }}</p>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="panel mt">
+    <div class="panel-title">
+        <h2>Equipo actual</h2>
+        <span class="muted small">{{ equipo|length }} usuario{{ equipo|length|pluralize }} interno{{ equipo|length|pluralize }}</span>
+    </div>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Contacto</th>
+                <th>Turno</th>
+                <th>Especialidad / zona</th>
+                <th>Vehículo</th>
+                <th>Activo</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for perfil in equipo %}
+            <tr>
+                <td>
+                    <strong>{{ perfil.user.get_full_name|default:perfil.user.username }}</strong><br>
+                    <small class="muted">{{ perfil.user.username }}</small>
+                </td>
+                <td><span class="badge rol-badge rol-{{ perfil.rol }}">{{ perfil.get_rol_display }}</span></td>
+                <td>
+                    {{ perfil.user.email|default:"—" }}<br>
+                    <small class="muted">{{ perfil.telefono|default:"Sin teléfono" }}</small>
+                </td>
+                <td>{{ perfil.get_turno_display|default:"—" }}</td>
+                <td>
+                    {{ perfil.especialidad|default:"—" }}
+                    {% if perfil.zona %}<br><small class="muted">Zona: {{ perfil.zona }}</small>{% endif %}
+                </td>
+                <td>{{ perfil.vehiculo|default:"—" }}</td>
+                <td>{% if perfil.user.is_active %}Sí{% else %}<span class="badge badge-danger">No</span>{% endif %}</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="7" class="empty">Todavía no hay usuarios internos.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p class="muted small mt">
+        El acceso al Admin de Django y a la API se reserva al rol Administrador.
+        Los demás roles trabajan en el panel interno.
+    </p>
+</section>
+
+<section class="grid-2 mt">
+    <div class="panel">
+        <h2>Crear usuario interno</h2>
+        <p class="muted small">
+            Vendedores, cocina, calidad, despacho o administración. La contraseña se
+            entrega a la persona y puede cambiarla luego.
+        </p>
+        <form method="post" action="{% url 'equipo_crear_usuario' %}" class="form mt">
+            {% csrf_token %}
+            <div class="form-row">
+                <label>Nombre {{ form_usuario.nombre }}</label>
+                <label>Apellido {{ form_usuario.apellido }}</label>
+            </div>
+            <div class="form-row">
+                <label>Usuario {{ form_usuario.username }}</label>
+                <label>Correo {{ form_usuario.email }}</label>
+            </div>
+            <div class="form-row">
+                <label>Teléfono {{ form_usuario.telefono }}</label>
+                <label>Rol {{ form_usuario.rol }}</label>
+            </div>
+            <div class="form-row">
+                <label>Turno {{ form_usuario.turno }}</label>
+                <label>Especialidad {{ form_usuario.especialidad }}</label>
+            </div>
+            <div class="form-row">
+                <label>Zona (despacho) {{ form_usuario.zona }}</label>
+                <label>Vehículo (despacho) {{ form_usuario.vehiculo }}</label>
+            </div>
+            <label>Notas {{ form_usuario.notas }}</label>
+            <div class="form-row">
+                <label>Contraseña {{ form_usuario.password1 }}</label>
+                <label>Repetir contraseña {{ form_usuario.password2 }}</label>
+            </div>
+            <button class="btn btn-solid" type="submit">Crear usuario</button>
+        </form>
+    </div>
+
+    <div class="panel">
+        <h2>Crear cliente</h2>
+        <p class="muted small">
+            La ficha sirve para ventas de mostrador. Si agregas usuario y contraseña,
+            el cliente también podrá comprar y seguir sus pedidos en la tienda.
+        </p>
+        <form method="post" action="{% url 'equipo_crear_cliente' %}" class="form mt">
+            {% csrf_token %}
+            <label>Nombre o razón social {{ form_cliente.nombre }}</label>
+            <div class="form-row">
+                <label>Teléfono {{ form_cliente.telefono }}</label>
+                <label>Correo {{ form_cliente.email }}</label>
+            </div>
+            <label>Dirección {{ form_cliente.direccion }}</label>
+            <div class="form-row">
+                <label>Usuario (opcional) {{ form_cliente.username }}</label>
+                <label>Contraseña (opcional) {{ form_cliente.password1 }}</label>
+            </div>
+            <label>Repetir contraseña {{ form_cliente.password2 }}</label>
+            <button class="btn btn-solid" type="submit">Crear cliente</button>
+        </form>
+
+        <h2 class="section-sub">Últimos clientes</h2>
+        <ul class="list">
+            {% for cliente in clientes %}
+                <li>
+                    <strong>{{ cliente.nombre }}</strong>
+                    <span class="muted">{{ cliente.telefono }} · {{ cliente.email|default:"sin correo" }}</span>
+                    {% if cliente.user_id %}<span class="badge badge-ok">Con cuenta</span>{% else %}<span class="badge">Mostrador</span>{% endif %}
+                </li>
+            {% empty %}
+                <li class="muted">Todavía no hay clientes registrados.</li>
+            {% endfor %}
+        </ul>
+    </div>
+</section>
+{% endblock %}

@@ -16,6 +16,9 @@
         <span class="badge {% if pedido.estado_pago == 'pagado' %}badge-ok{% elif pedido.estado_pago == 'parcial' %}badge-warn{% else %}badge-danger{% endif %}">
             {{ pedido.estado_pago_display }}
         </span>
+        {% if puede_editar %}
+            <a class="btn btn-ghost btn-mini" href="{% url 'pedido_editar' pedido.pk %}">Editar pedido</a>
+        {% endif %}
     </div>
 </section>
 
@@ -77,10 +80,11 @@
             <h2>Acciones del pedido</h2>
             <p class="muted small">
                 Confirmar requiere el pago del anticipo. Cancelar repone los insumos
-                descontados del inventario.
+                descontados del inventario. Solo aparecen las acciones que tu rol
+                puede ejecutar.
             </p>
             <div class="kanban-actions mt">
-                {% for clave, etiqueta in pedido.transiciones_disponibles %}
+                {% for clave, etiqueta in pedido.transiciones_visibles %}
                 <form method="post" action="{% url 'pedido_cambiar_estado' pedido.pk %}">
                     {% csrf_token %}
                     <input type="hidden" name="estado" value="{{ clave }}">
@@ -91,7 +95,7 @@
                     </button>
                 </form>
                 {% empty %}
-                <p class="muted small">El pedido está cerrado.</p>
+                <p class="muted small">No hay acciones disponibles para tu rol en este estado.</p>
                 {% endfor %}
             </div>
         </div>

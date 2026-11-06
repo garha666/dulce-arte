@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Editar {{ pedido.codigo }}{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="{% url 'pedido_detalle' pedido.pk %}">← Volver al pedido {{ pedido.codigo }}</a></p>
+
+<section class="page-head">
+    <div>
+        <p class="panel-role">Edición de pedido</p>
+        <h1>{{ pedido.codigo }}</h1>
+        <p class="lede">
+            Corrige datos de contacto, agenda, entrega y productos mientras el pedido
+            no haya descontado insumos. El estado se cambia desde las acciones del pedido.
+        </p>
+    </div>
+    <div class="panel-head-actions">
+        <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+    </div>
+</section>
+
+{% if form.non_field_errors or formset.non_form_errors %}
+<div class="panel">
+    {% for error in form.non_field_errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+    {% for error in formset.non_form_errors %}<p class="field-error">{{ error }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<form method="post" class="panel form mt">
+    {% csrf_token %}
+
+    <h2>Datos del pedido</h2>
+    <div class="form-row mt">
+        <label>Cliente
+            {{ form.cliente }}
+            {% if form.cliente.errors %}<span class="field-error">{{ form.cliente.errors|striptags }}</span>{% endif %}
+        </label>
+        <label>Canal
+            {{ form.canal }}
+        </label>
+    </div>
+
+    <div class="form-row">
+        <label>Modalidad
+            {{ form.modalidad }}
+        </label>
+        <label>Fecha y hora de entrega
+            {{ form.fecha_entrega }}
+            {% if form.fecha_entrega.errors %}<span class="field-error">{{ form.fecha_entrega.errors|striptags }}</span>{% endif %}
+        </label>
+    </div>
+
+    <div class="form-row">
+        <label>Dirección de despacho
+            {{ form.direccion_entrega }}
+            {% if form.direccion_entrega.errors %}<span class="field-error">{{ form.direccion_entrega.errors|striptags }}</span>{% endif %}
+        </label>
+        <label>Teléfono de contacto
+            {{ form.telefono_contacto }}
+        </label>
+    </div>
+
+    <label>Diseño y personalización
+        {{ form.descripcion_diseno }}
+    </label>
+
+    <div class="form-row">
+        <label>Costo de despacho
+            {{ form.costo_despacho }}
+        </label>
+        <label>Observaciones internas
+            {{ form.observaciones }}
+        </label>
+    </div>
+
+    <label>Retirado por (solo retiro)
+        {{ form.retirado_por }}
+        <span class="form-hint">Se exige al cerrar un retiro como entregado.</span>
+    </label>
+
+    <h2 class="section-sub">Productos del pedido</h2>
+    {{ formset.management_form }}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Cantidad</th>
+                <th>Precio unitario</th>
+                <th>Personalización</th>
+                <th>Quitar</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for detalle_form in formset %}
+            <tr>
+                <td>
+                    {{ detalle_form.id }}
+                    {{ detalle_form.producto }}
+                    {% if detalle_form.producto.errors %}<span class="field-error">{{ detalle_form.producto.errors|striptags }}</span>{% endif %}
+                </td>
+                <td>
+                    {{ detalle_form.cantidad }}
+                    {% if detalle_form.cantidad.errors %}<span class="field-error">{{ detalle_form.cantidad.errors|striptags }}</span>{% endif %}
+                </td>
+                <td>
+                    {{ detalle_form.precio_unitario }}
+                    <span class="form-hint">Vacío = precio del catálogo</span>
+                </td>
+                <td>{{ detalle_form.personalizacion }}</td>
+                <td>{{ detalle_form.DELETE }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p class="muted small">
+        El pedido debe conservar al menos un producto. Si dejas una fila vacía, se ignora.
+    </p>
+
+    <div class="botones">
+        <button class="btn btn-solid" type="submit">Guardar cambios</button>
+        <a class="btn btn-ghost" href="{% url 'pedido_detalle' pedido.pk %}">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

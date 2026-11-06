@@ -40,9 +40,15 @@ páginas Django server-side.
 6. **Despacho y retiro**: la ruta deja el pedido en `despachado`; la entrega se cierra con firma o
    comprobante. El retiro exige registrar quién retira.
 7. **Panel interno por roles**: ventas, cocina, calidad y despacho con formularios Django; sin
-   llamadas a la API.
-8. **API administrativa**: DRF disponible solo para el rol administrador, con acciones
-   `cambiar_estado` y `descontar_insumos`.
+   llamadas a la API. Cada rol ve solo las transiciones que le corresponden.
+8. **Gestión de equipo y clientes**: pantalla `/equipo/` para crear usuarios internos con rol,
+   turno, especialidad, zona y vehículo; creación de clientes con o sin cuenta de tienda.
+9. **Catálogo con imágenes**: foto propia subida desde el Admin o imagen de demostración incluida
+   en `static/IMAGES/productos/`; miniatura en el listado del Admin.
+10. **Edición de pedidos**: ventas/admin corrigen cabecera y productos mientras el pedido no haya
+    descontado insumos, sin saltarse la máquina de estados.
+11. **API administrativa**: DRF disponible solo para el rol administrador, con acciones
+    `cambiar_estado` y `descontar_insumos`.
 
 ## Estructura
 
@@ -61,8 +67,8 @@ dulce-arte/
 │   ├── admin.py          # Admin personalizado
 │   ├── migrations/
 │   └── urls.py
-├── templates/            # tienda, cuenta, paneles por rol y sitio público
-├── static/               # css/estilos.css y fonts/ (sin JS de negocio)
+├── templates/            # tienda, cuenta, paneles por rol, equipo y sitio público
+├── static/               # css/estilos.css, fonts/ e IMAGES/productos/ (fotos demo)
 ├── docs/                 # constitución, modelo de datos, guion y ADRs
 ├── specs/                # especificaciones SDD 001 y 002
 ├── deploy/               # gunicorn.service, nginx.conf, guía de despliegue
@@ -110,6 +116,20 @@ en `/login/` y el Admin de Django en `/admin/`.
 
 > Estas claves son solo para la demo local. Cámbialas antes de publicar la instancia EC2.
 
+### Roles en una línea
+
+| Rol | Qué hace | Qué no puede hacer |
+|---|---|---|
+| Administrador | Configura catálogo, equipo, pagos y toda la operación | Entregar sin evidencia o editar pedidos con BOM descontado |
+| Ventas | Registra pedidos, cobra anticipos, confirma y cancela | Iniciar producción, despachar o crear rutas |
+| Cocina | Inicia preparación, hornea y envía a calidad | Confirmar pagos, cancelar o entregar |
+| Calidad | Aprueba el paso a Listo o devuelve a preparación | Producir, cobrar o despachar |
+| Despacho | Crea rutas, entrega con evidencia y registra retiros | Confirmar pedidos o modificar producción |
+| Cliente | Compra, sigue sus pedidos y ve solo los propios | Entrar al panel interno o a la API |
+
+La guía completa (atributos, responsabilidades, permisos y transiciones reales) está en
+`/equipo/` y en `api/roles.py`.
+
 ## Rutas principales
 
 | Ruta | Descripción | Acceso |
@@ -123,10 +143,13 @@ en `/login/` y el Admin de Django en `/admin/`.
 | `/registro/` | Crear cuenta de cliente | Público |
 | `/mis-pedidos/` | Historial del cliente autenticado | Cliente |
 | `/pedidos/` | Listado, alta de mostrador y filtros | admin, ventas, cocina, calidad, despacho |
-| `/pedidos/<id>/` | Detalle, pagos y transiciones | Dueño o personal interno |
+| `/pedidos/<id>/` | Detalle, pagos y transiciones según rol | Dueño o personal interno |
+| `/pedidos/<id>/editar/` | Corregir cabecera y productos antes del BOM | admin, ventas |
 | `/kanban/` | Tablero de producción | admin, cocina, calidad |
 | `/inventario/` | Stock de insumos y recetas (BOM) | admin, cocina, calidad |
+| `/equipo/` | Guía de roles, alta de equipo y clientes | admin |
 | `/despachos/` | Rutas, evidencia de entrega y retiros | admin, despacho |
+| `/health/` | Sonda de salud (app + base de datos) | Público |
 | `/quienes-somos/`, `/servicios/`, `/contacto/` | Sitio público | Público |
 | `/admin/` | Django Admin personalizado | admin |
 | `/api/` | API DRF | **solo admin** |
@@ -174,10 +197,11 @@ python manage.py test api
 python smoke_test.py
 ```
 
-Resultado esperado: `manage.py check` sin errores, **43 pruebas OK** en `api/tests.py` (flujo,
-pagos, agenda, despacho, tienda, cuenta, API admin-only, BOM y frontend) y `smoke_test.py` con
-todas las páginas en 200, 403 para ventas/cocina/cliente en la API y descuento/reposición de
-stock dentro de una transacción con rollback.
+Resultado esperado: `manage.py check` sin errores, **54 pruebas OK** en `api/tests.py` (flujo,
+pagos, agenda, despacho, tienda, cuenta, permisos por rol, equipo, edición de pedidos, imágenes,
+health, API admin-only, BOM y frontend) y `smoke_test.py` con todas las páginas en 200, 403 para
+ventas/cocina/cliente en la API y descuento/reposición de stock dentro de una transacción con
+rollback.
 
 ## Despliegue en AWS EC2
 

@@ -36,7 +36,7 @@ if not producto:
     raise SystemExit("No hay productos activos. Ejecuta python seed_data.py.")
 
 print("== Sitio público ==")
-for ruta in ["/", "/tienda/", f"/tienda/{producto.pk}/", "/seguimiento/", "/registro/", "/carrito/", "/servicios/", "/contacto/"]:
+for ruta in ["/", "/health/", "/tienda/", f"/tienda/{producto.pk}/", "/seguimiento/", "/registro/", "/carrito/", "/servicios/", "/contacto/"]:
     revisar(ruta, 200, publico)
 
 admin = User.objects.filter(username="admin").first()
@@ -48,7 +48,7 @@ if not interno.login(username="admin", password="Dulce2026!"):
     raise SystemExit("No se pudo iniciar sesión como admin.")
 
 print("\n== Panel interno y API (admin) ==")
-for ruta in ["/kanban/", "/pedidos/", "/inventario/", "/despachos/", "/api/", "/api/pedidos/"]:
+for ruta in ["/kanban/", "/pedidos/", "/inventario/", "/despachos/", "/equipo/", "/api/", "/api/pedidos/"]:
     revisar(ruta, 200, interno)
 
 print("\n== La API queda cerrada para roles operativos ==")

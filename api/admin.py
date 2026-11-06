@@ -1,6 +1,8 @@
 """Panel de administración personalizado de Dulce Arte."""
 
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 from django.utils.html import format_html
 
 from .models import (
@@ -29,13 +31,98 @@ admin.site.index_title = "Panel de gestión de la pastelería"
 
 
 # --------------------------------------------------------------------------- #
-#  Usuarios
+#  Usuarios: cuenta + perfil (rol y atributos) en una sola pantalla
 # --------------------------------------------------------------------------- #
+class PerfilInline(admin.StackedInline):
+    model = Perfil
+    can_delete = False
+    extra = 1
+    max_num = 1
+    verbose_name_plural = "Perfil, rol y atributos"
+    fields = (
+        "rol",
+        "telefono",
+        "turno",
+        "especialidad",
+        "zona",
+        "vehiculo",
+        "notas",
+    )
+
+
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin):
+    inlines = [PerfilInline]
+    list_display = (
+        "username",
+        "nombre_completo",
+        "email",
+        "rol_mostrado",
+        "is_active",
+        "is_staff",
+    )
+    list_filter = BaseUserAdmin.list_filter + ("perfil__rol", "perfil__turno")
+    search_fields = (
+        "username",
+        "first_name",
+        "last_name",
+        "email",
+        "perfil__telefono",
+        "perfil__especialidad",
+    )
+    list_select_related = ("perfil",)
+    list_per_page = 25
+    actions = ("activar_usuarios", "desactivar_usuarios")
+
+    @admin.display(description="Nombre")
+    def nombre_completo(self, obj):
+        return obj.get_full_name() or "—"
+
+    @admin.display(description="Rol", ordering="perfil__rol")
+    def rol_mostrado(self, obj):
+        perfil = getattr(obj, "perfil", None)
+        return perfil.get_rol_display() if perfil else "Sin perfil"
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        Perfil.objects.get_or_create(
+            user=form.instance, defaults={"rol": "cliente"}
+        )
+
+    @admin.action(description="Activar las cuentas seleccionadas")
+    def activar_usuarios(self, request, queryset):
+        actualizados = queryset.update(is_active=True)
+        self.message_user(request, f"{actualizados} cuenta(s) activadas.")
+
+    @admin.action(description="Desactivar las cuentas seleccionadas")
+    def desactivar_usuarios(self, request, queryset):
+        actualizados = queryset.exclude(pk=request.user.pk).update(is_active=False)
+        self.message_user(request, f"{actualizados} cuenta(s) desactivadas.")
+
+
 @admin.register(Perfil)
 class PerfilAdmin(admin.ModelAdmin):
-    list_display = ("user", "rol", "telefono")
-    list_filter = ("rol",)
-    search_fields = ("user__username", "user__first_name", "user__last_name")
+    list_display = (
+        "user",
+        "rol",
+        "telefono",
+        "turno",
+        "especialidad",
+        "zona",
+        "vehiculo",
+    )
+    list_filter = ("rol", "turno")
+    search_fields = (
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "especialidad",
+        "zona",
+    )
     list_select_related = ("user",)
 
 
@@ -107,6 +194,7 @@ class CategoriaProductoAdmin(admin.ModelAdmin):
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
     list_display = (
+        "miniatura",
         "nombre",
         "categoria",
         "precio_base",
@@ -119,6 +207,44 @@ class ProductoAdmin(admin.ModelAdmin):
     search_fields = ("nombre", "descripcion")
     inlines = [RecetaInsumoInline]
     list_editable = ("activo",)
+    readonly_fields = ("miniatura",)
+    fieldsets = (
+        (
+            "Producto",
+            {
+                "fields": (
+                    "nombre",
+                    "categoria",
+                    "descripcion",
+                    "precio_base",
+                    "porciones",
+                    "activo",
+                )
+            },
+        ),
+        (
+            "Imagen del catálogo",
+            {
+                "fields": ("miniatura", "imagen", "imagen_estatica"),
+                "description": (
+                    "Sube una foto propia o usa una imagen de demostración de "
+                    "static/IMAGES. La imagen subida tiene prioridad."
+                ),
+            },
+        ),
+    )
+
+    @admin.display(description="Imagen")
+    def miniatura(self, obj):
+        if not obj or not obj.pk:
+            return "—"
+        return format_html(
+            '<img src="{}" alt="{}" '
+            'style="height:52px;width:68px;object-fit:cover;'
+            'border-radius:8px;border:1px solid #e8d8c6;">',
+            obj.imagen_url,
+            obj.nombre,
+        )
 
     @admin.display(description="Costo insumos")
     def costo_estimado(self, obj):
@@ -176,6 +302,7 @@ class PedidoAdmin(admin.ModelAdmin):
         "token_seguimiento",
         "fecha_pedido",
         "actualizado",
+        "estado",
         "total_pedido",
         "saldo_pedido",
         "estado_pago",
@@ -283,12 +410,19 @@ class ClienteAdmin(admin.ModelAdmin):
         "telefono",
         "email",
         "user",
+        "tiene_cuenta",
         "direccion",
         "pedidos_count",
     )
+    list_filter = ("user__is_active",)
     search_fields = ("nombre", "telefono", "email", "user__username")
     list_select_related = ("user",)
     list_per_page = 25
+    autocomplete_fields = ("user",)
+
+    @admin.display(description="Cuenta", boolean=True)
+    def tiene_cuenta(self, obj):
+        return obj.tiene_cuenta
 
     @admin.display(description="Pedidos")
     def pedidos_count(self, obj):
