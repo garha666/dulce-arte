@@ -774,6 +774,183 @@ p { margin: 0; }
     color: #a98f83;
 }
 
+/* --------------------------------------------------------------- tienda */
+.cart-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    background: var(--papel);
+    color: var(--cacao);
+    font-size: .84rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+.cart-link:hover { border-color: var(--borde-fuerte); text-decoration: none; }
+.cart-icon { font-size: 1rem; line-height: 1; }
+.cart-count {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--frambuesa);
+    color: #fff;
+    font-size: .7rem;
+    display: inline-grid;
+    place-items: center;
+}
+
+.filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    background: var(--papel);
+    color: var(--cacao);
+    font-size: .84rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.chip:hover { border-color: var(--borde-fuerte); text-decoration: none; }
+.chip.is-active { background: var(--tinta); color: var(--crema); border-color: var(--tinta); }
+.chip-count { font-size: .72rem; opacity: .7; }
+
+.product-card { padding: 16px 18px 18px; }
+.product-media {
+    display: grid;
+    place-items: center;
+    height: 170px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #f6e2d4, #efd0c0);
+    margin-bottom: 12px;
+}
+.product-media img { width: 100%; height: 100%; object-fit: cover; }
+.product-media-placeholder {
+    font-family: var(--display);
+    font-size: 3.4rem;
+    color: rgba(74, 44, 42, .35);
+}
+.product-media-placeholder.large { font-size: 7rem; }
+.product-head h3 a { color: var(--tinta); }
+.product-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 10px;
+}
+
+.product-detail {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+    gap: 40px;
+    align-items: start;
+    margin-bottom: 12px;
+}
+.product-detail-media {
+    display: grid;
+    place-items: center;
+    min-height: 320px;
+    border-radius: var(--radio);
+    background: linear-gradient(135deg, #f6e2d4, #efd0c0);
+    overflow: hidden;
+}
+.product-detail-media img { width: 100%; height: 100%; object-fit: cover; }
+.product-detail-info h1 { font-size: clamp(1.9rem, 3.4vw, 2.7rem); }
+.product-price.large { font-size: 1.6rem; display: block; margin: 8px 0 10px; }
+.product-facts {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 14px 0;
+    margin: 16px 0 0;
+    border-top: 1px solid var(--borde);
+    border-bottom: 1px solid var(--borde);
+    font-size: .86rem;
+    color: var(--suave);
+}
+.product-facts strong { color: var(--tinta); }
+.recipe-list { margin: 12px 0 0; padding-left: 18px; font-size: .88rem; }
+.recipe-list li { padding: 3px 0; }
+.breadcrumb { font-size: .84rem; margin-bottom: 16px; }
+
+.qty-form { display: flex; gap: 6px; align-items: center; }
+.qty-form input { width: 68px; padding: 6px 8px; border: 1px solid var(--borde-fuerte); border-radius: 8px; font-family: var(--texto); }
+.cart-table td { vertical-align: middle; }
+.cart-summary .totales { justify-content: stretch; grid-template-columns: 1fr auto; }
+.summary-list { list-style: none; margin: 0; padding: 0; }
+.summary-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid #f4e7d9;
+    font-size: .88rem;
+}
+.summary-list li:last-child { border-bottom: 0; }
+
+.info-box {
+    background: var(--crema);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 14px 16px;
+}
+.info-box h3 { font-size: .95rem; margin-bottom: 6px; }
+.info-box p + p { margin-top: 6px; }
+
+.detail-list { margin: 14px 0 0; display: grid; gap: 8px; }
+.detail-list div { display: flex; justify-content: space-between; gap: 16px; font-size: .88rem; }
+.detail-list dt { color: var(--suave); }
+.detail-list dd { margin: 0; font-weight: 600; text-align: right; }
+
+.order-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 18px;
+}
+.order-card {
+    background: var(--papel);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    padding: 20px 22px;
+    box-shadow: 0 1px 0 rgba(74, 44, 42, .03);
+}
+.order-card h2 { font-size: 1.35rem; }
+.order-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.order-card-actions { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; font-size: .84rem; }
+
+.empty-cart { text-align: center; padding: 48px 24px; }
+.empty-cart .btn { margin-top: 16px; }
+
+.field-error { color: var(--frambuesa-oscura); font-size: .78rem; font-weight: 600; }
+.form-hint { color: var(--suave); font-size: .74rem; font-weight: 500; }
+.form .checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: .84rem;
+}
+.form .checkbox input { width: 18px; height: 18px; accent-color: var(--frambuesa); }
+.grow { flex: 1 1 240px; }
+.panel-summary { cursor: pointer; list-style: none; }
+.panel-summary::-webkit-details-marker { display: none; }
+.panel-summary h2 { display: inline; }
+.estado-confirmado { background: #eef0e8; color: #5c6b4a; border-color: #dde2d1; }
+
 /* ---------------------------------------------------------------- responsive */
 @media (max-width: 980px) {
     .hero { grid-template-columns: 1fr; gap: 28px; }
@@ -781,6 +958,7 @@ p { margin: 0; }
     .login-wrap { grid-template-columns: 1fr; max-width: 560px; }
     .login-aside { padding: 30px 28px; }
     .footer-inner { grid-template-columns: 1fr 1fr; }
+    .product-detail { grid-template-columns: 1fr; gap: 24px; }
 }
 
 @media (max-width: 720px) {

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Carrito{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Tu pedido</p>
+        <h1>Carrito</h1>
+        <p class="lede">{{ carrito_unidades }} unidad{{ carrito_unidades|pluralize:"es" }} seleccionada{{ carrito_unidades|pluralize }}.</p>
+    </div>
+</section>
+
+{% if lineas %}
+<section class="grid-2">
+    <div class="panel">
+        <h2>Productos</h2>
+        <table class="table cart-table">
+            <thead>
+                <tr><th>Producto</th><th>Cantidad</th><th>Subtotal</th><th></th></tr>
+            </thead>
+            <tbody>
+            {% for linea in lineas %}
+                <tr>
+                    <td>
+                        <strong>{{ linea.producto.nombre }}</strong><br>
+                        <small class="muted">${{ linea.producto.precio_base|floatformat:0 }} c/u</small>
+                        {% if linea.personalizacion %}
+                            <br><small class="muted">“{{ linea.personalizacion }}”</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" action="{% url 'carrito_actualizar' linea.producto.pk %}" class="qty-form">
+                            {% csrf_token %}
+                            <input type="number" name="cantidad" min="1" max="50" value="{{ linea.cantidad }}">
+                            <button class="btn btn-ghost btn-mini" type="submit">Actualizar</button>
+                        </form>
+                    </td>
+                    <td>${{ linea.subtotal|floatformat:0 }}</td>
+                    <td>
+                        <form method="post" action="{% url 'carrito_quitar' linea.producto.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn-danger btn-mini" type="submit">Quitar</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <a class="link" href="{% url 'tienda' %}">← Seguir comprando</a>
+    </div>
+
+    <aside class="panel cart-summary">
+        <h2>Resumen</h2>
+        <dl class="totales">
+            <dt>Productos</dt><dd>${{ carrito_total|floatformat:0 }}</dd>
+            <dt>Despacho</dt><dd>Desde $3.500</dd>
+        </dl>
+        <p class="muted small">El costo de despacho se agrega en el checkout. El retiro en tienda no tiene costo.</p>
+        <a class="btn btn-solid btn-lg btn-block mt" href="{% url 'checkout' %}">Continuar al checkout</a>
+        <p class="muted small">Necesitamos 48 horas de anticipación y confirmación del abono.</p>
+    </aside>
+</section>
+{% else %}
+<section class="panel empty-cart">
+    <h2>Tu carrito está vacío</h2>
+    <p class="muted">Explora el catálogo y elige lo que quieres hornear.</p>
+    <a class="btn btn-solid mt" href="{% url 'tienda' %}">Ir al catálogo</a>
+</section>
+{% endif %}
+{% endblock %}

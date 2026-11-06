@@ -1,13 +1,14 @@
 # AGENTS.md — Dulce Arte (EVA 3 Backend)
 
-Sistema de trazabilidad y pedidos para una pastelería artesanal: cotización de pedidos
-personalizados, tablero Kanban de cocina, descuento de insumos por receta (BOM) y despacho
-con confirmación de entrega. Proyecto individual de la asignatura Desarrollo Backend.
+Sistema de tienda y trazabilidad para una pastelería artesanal: catálogo público, carrito,
+checkout con agenda, pago de anticipo, tablero Kanban de cocina, descuento de insumos por
+receta (BOM) y despacho con confirmación de entrega. Proyecto individual de la asignatura
+Desarrollo Backend.
 
 ## Stack y estructura
 - Django 5.2 + Django REST Framework + PostgreSQL + templates HTML/CSS/JS (sin frameworks JS).
 - `drf/` proyecto (settings por `.env`, `urls.py` raíz). `api/` única app: `models.py`,
-  `admin.py`, `serializers.py`, `views.py`, `permissions.py`, `urls.py`.
+  `admin.py`, `serializers.py`, `views.py`, `forms.py`, `carrito.py`, `permissions.py`, `roles.py`, `urls.py`.
 - `templates/` páginas HTML; `static/` CSS y JS; `media/` archivos subidos.
 - `docs/` constitución y modelo de datos; `specs/` especificaciones SDD; `deploy/` archivos de EC2.
 
@@ -29,10 +30,15 @@ con confirmación de entrega. Proyecto individual de la asignatura Desarrollo Ba
 
 ## Reglas de dominio (fáciles de romper)
 - El estado del pedido **solo** cambia por `Pedido.cambiar_estado`; valida `TRANSICIONES`.
+- `confirmado` exige un `Pago` registrado; producción no arranca sin confirmar.
 - El descuento de insumos ocurre **una sola vez** (bandera `insumos_descontados`) al pasar
-  a `preparacion`, y debe ser atómico (`transaction.atomic`).
-- Un despacho no se confirma sin firma o comprobante (`Despacho.clean`).
-- Las fechas de entrega usan `America/Santiago`; nunca comparar con UTC.
+  a `preparacion`, y debe ser atómico (`transaction.atomic`). Cancelar repone con `reponer_insumos`.
+- Crear un despacho deja el pedido en `despachado`; se cierra en `entregado` solo con firma o
+  comprobante (`Despacho.clean`). Un retiro exige `retirado_por`.
+- La agenda usa 48 h para pedidos web, horario 09:00–18:59 y cupo de 6 por día; el cupo se
+  cuenta con rango de fecha local (`America/Santiago`), nunca con `__date` ni UTC.
+- La API REST es **solo para administración** (`EsAdministrador`); el panel interno y la tienda
+  se resuelven server-side, sin `fetch` a `/api/`.
 
 ## Forma de trabajar
 - Antes de cambios grandes, leer `docs/constitution.md` y la spec activa en `specs/`.
@@ -46,4 +52,6 @@ con confirmación de entrega. Proyecto individual de la asignatura Desarrollo Ba
 
 ## Verificación
 - `python manage.py check` sin errores.
-- `python smoke_test.py`: todas las páginas 200, cambio de estado 200 y transición inválida 400.
+- `python manage.py test api`: 43 pruebas OK.
+- `python smoke_test.py`: tienda y panel 200, API 403 para roles operativos, descuento y
+  reposición de stock con rollback.

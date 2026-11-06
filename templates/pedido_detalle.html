@@ -6,9 +6,17 @@
     <div>
         <p class="panel-role">Pedido</p>
         <h1>{{ pedido.codigo }}</h1>
-        <p class="lede">{{ pedido.cliente.nombre }} · entrega {{ pedido.fecha_entrega|date:"d/m/Y H:i" }}</p>
+        <p class="lede">
+            {{ pedido.cliente.nombre }} · entrega {{ pedido.fecha_entrega|date:"d/m/Y H:i" }}
+            · {{ pedido.get_modalidad_display }}
+        </p>
     </div>
-    <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+    <div class="panel-head-actions">
+        <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+        <span class="badge {% if pedido.estado_pago == 'pagado' %}badge-ok{% elif pedido.estado_pago == 'parcial' %}badge-warn{% else %}badge-danger{% endif %}">
+            {{ pedido.estado_pago_display }}
+        </span>
+    </div>
 </section>
 
 <section class="grid-2">
@@ -31,8 +39,10 @@
         </table>
 
         <dl class="totales">
+            <dt>Productos</dt><dd>${{ pedido.subtotal_productos|floatformat:0 }}</dd>
+            <dt>Despacho</dt><dd>${{ pedido.costo_despacho|floatformat:0 }}</dd>
             <dt>Total</dt><dd>${{ pedido.total|floatformat:0 }}</dd>
-            <dt>Anticipo</dt><dd>${{ pedido.anticipo|floatformat:0 }}</dd>
+            <dt>Pagado</dt><dd>${{ pedido.total_pagado|floatformat:0 }}</dd>
             <dt>Saldo</dt><dd>${{ pedido.saldo|floatformat:0 }}</dd>
         </dl>
 
@@ -43,31 +53,113 @@
         {% if pedido.imagen_referencia %}
             <p><a href="{{ pedido.imagen_referencia.url }}" target="_blank">Ver imagen de referencia</a></p>
         {% endif %}
-    </div>
 
-    <div class="panel">
-        <h2>Trazabilidad</h2>
+        {% if es_interno %}
+        <h2 class="mt">Trazabilidad</h2>
         <ul class="timeline">
         {% for evento in pedido.historial.all %}
             <li>
                 <strong>{{ evento.get_estado_nuevo_display }}</strong>
                 <span class="muted">{{ evento.fecha|date:"d/m/Y H:i" }}
                     {% if evento.usuario %}· {{ evento.usuario.username }}{% endif %}</span>
-                {% if evento.comentario %}<p>{{ evento.comentario }}</p>{% endif %}
+                {% if evento.comentario %}<p class="small">{{ evento.comentario }}</p>{% endif %}
             </li>
         {% empty %}
             <li class="muted">Sin movimientos registrados.</li>
         {% endfor %}
         </ul>
+        {% endif %}
+    </div>
 
-        <h2 class="mt">Insumos</h2>
-        <p class="muted">
-            {% if pedido.insumos_descontados %}
-                Los insumos del pedido ya fueron descontados del inventario.
-            {% else %}
-                Aún no se descuentan (se hace al pasar a “En preparación”).
+    <div>
+        {% if es_interno %}
+        <div class="panel">
+            <h2>Acciones del pedido</h2>
+            <p class="muted small">
+                Confirmar requiere el pago del anticipo. Cancelar repone los insumos
+                descontados del inventario.
+            </p>
+            <div class="kanban-actions mt">
+                {% for clave, etiqueta in pedido.transiciones_disponibles %}
+                <form method="post" action="{% url 'pedido_cambiar_estado' pedido.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="estado" value="{{ clave }}">
+                    <button class="btn btn-mini {% if clave == 'cancelado' %}btn-danger{% else %}btn-solid{% endif %}"
+                            type="submit"
+                            {% if clave == 'cancelado' %}onclick="return confirm('¿Cancelar el pedido? Se repondrán los insumos.');"{% endif %}>
+                        {{ etiqueta }}
+                    </button>
+                </form>
+                {% empty %}
+                <p class="muted small">El pedido está cerrado.</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="panel mt">
+            <h2>Pagos</h2>
+            <table class="table">
+                <thead><tr><th>Fecha</th><th>Monto</th><th>Método</th><th>Tipo</th></tr></thead>
+                <tbody>
+                {% for pago in pedido.pagos.all %}
+                    <tr>
+                        <td>{{ pago.fecha|date:"d/m/Y H:i" }}</td>
+                        <td>${{ pago.monto|floatformat:0 }}</td>
+                        <td>{{ pago.get_metodo_display }}</td>
+                        <td>{{ pago.get_tipo_display }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="4" class="empty">Sin pagos registrados.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+
+            {% if puede_crear_pago %}
+            <form method="post" action="{% url 'pedido_registrar_pago' pedido.pk %}" class="form mt">
+                {% csrf_token %}
+                <div class="form-row">
+                    <label>Monto
+                        {{ pago_form.monto }}
+                    </label>
+                    <label>Método
+                        {{ pago_form.metodo }}
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label>Tipo
+                        {{ pago_form.tipo }}
+                    </label>
+                    <label>Referencia
+                        {{ pago_form.referencia }}
+                    </label>
+                </div>
+                <button class="btn btn-solid" type="submit">Registrar pago</button>
+            </form>
             {% endif %}
-        </p>
+        </div>
+        {% endif %}
+
+        <div class="panel {% if es_interno %}mt{% endif %}">
+            <h2>Entrega</h2>
+            <dl class="detail-list">
+                <div><dt>Modalidad</dt><dd>{{ pedido.get_modalidad_display }}</dd></div>
+                {% if pedido.modalidad == 'despacho' %}
+                    <div><dt>Dirección</dt><dd>{{ pedido.direccion_entrega|default:"Sin dirección" }}</dd></div>
+                    {% if pedido.despacho %}
+                        <div><dt>Salida</dt><dd>{{ pedido.despacho.fecha_salida|date:"d/m/Y H:i"|default:"Pendiente" }}</dd></div>
+                        <div><dt>Confirmación</dt><dd>{% if pedido.despacho.confirmado %}Sí, con evidencia{% else %}Pendiente{% endif %}</dd></div>
+                    {% endif %}
+                {% else %}
+                    <div><dt>Retira</dt><dd>{{ pedido.retirado_por|default:"Aún no registrado" }}</dd></div>
+                {% endif %}
+                <div><dt>Teléfono</dt><dd>{{ pedido.telefono_contacto|default:pedido.cliente.telefono }}</dd></div>
+            </dl>
+            {% if pedido.insumos_descontados %}
+                <p class="muted small mt">Los insumos ya fueron descontados del inventario.</p>
+            {% else %}
+                <p class="muted small mt">Los insumos se descuentan al pasar a “En preparación”.</p>
+            {% endif %}
+        </div>
     </div>
 </section>
 {% endblock %}

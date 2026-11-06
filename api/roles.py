@@ -12,6 +12,7 @@ ETIQUETAS_ROL = dict(Perfil.ROLES)
 ROLES_PRODUCCION = frozenset({"admin", "cocina", "calidad"})
 ROLES_PEDIDOS = frozenset({"admin", "ventas"})
 ROLES_DESPACHO = frozenset({"admin", "despacho"})
+ROLES_INTERNOS = frozenset({"admin", "ventas", "cocina", "calidad", "despacho"})
 
 # Cada ítem: (nombre de URL, texto del menú)
 MENUS = {
@@ -21,11 +22,12 @@ MENUS = {
         ("kanban", "Cocina"),
         ("inventario", "Insumos"),
         ("despachos", "Despachos"),
+        ("tienda", "Tienda"),
     ],
     "ventas": [
         ("home", "Panel"),
         ("pedidos", "Pedidos"),
-        ("servicios", "Catálogo"),
+        ("tienda", "Tienda"),
         ("contacto", "Contacto"),
     ],
     "cocina": [
@@ -45,6 +47,11 @@ MENUS = {
         ("despachos", "Despachos"),
         ("pedidos", "Pedidos"),
     ],
+    "cliente": [
+        ("tienda", "Tienda"),
+        ("mis_pedidos", "Mis pedidos"),
+        ("seguimiento", "Seguir pedido"),
+    ],
 }
 
 
@@ -55,7 +62,7 @@ def rol_de(user):
     if user.is_superuser or user.is_staff:
         return "admin"
     perfil = getattr(user, "perfil", None)
-    return perfil.rol if perfil else "ventas"
+    return perfil.rol if perfil else "cliente"
 
 
 def etiqueta_rol(user):

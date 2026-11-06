@@ -77,6 +77,7 @@ python manage.py migrate
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
 # Solo para una demo controlada; cambia las claves demo después:
+# incluye admin/ventas/cocina/calidad/despacho y el cliente demo.
 SEED_DEMO_DATA=true bash deploy/instalar.sh   # o: python seed_data.py
 ```
 
@@ -124,11 +125,16 @@ namei -l /home/ubuntu/apps/dulce-arte/dulcearte.sock
 
 Abrir en el navegador:
 
-- `http://IP_ELASTICA/` → landing pública (el panel de gestión está en `/login/`)
+- `http://IP_ELASTICA/` → landing pública
+- `http://IP_ELASTICA/tienda/` → catálogo, carrito y checkout
+- `http://IP_ELASTICA/seguimiento/` → seguimiento público por código
+- `http://IP_ELASTICA/login/` → panel interno por roles
 - `http://IP_ELASTICA/admin/` → Django Admin con estilos (estáticos servidos por Nginx)
-- `http://IP_ELASTICA/api/` → navegador de DRF
+- `http://IP_ELASTICA/api/` → API DRF; **solo responde al rol administrador**
 
 Si el Admin aparece sin CSS, revisar `STATIC_ROOT`, `collectstatic` y el bloque `location /static/`.
+Si la API responde 403 con un usuario interno, es el comportamiento esperado: la API está
+reservada a administración y el resto del equipo trabaja en el panel HTML.
 
 ## 9. HTTPS y cookies seguras (recomendado)
 

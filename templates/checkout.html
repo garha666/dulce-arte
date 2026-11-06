@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Checkout{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Último paso</p>
+        <h1>Confirma tu pedido</h1>
+        <p class="lede">
+            Reservamos tu cupo al recibir el pedido. Luego coordinamos el abono
+            del anticipo por transferencia, efectivo o tarjeta.
+        </p>
+    </div>
+</section>
+
+<section class="grid-2">
+    <div class="panel">
+        <h2>Datos de entrega</h2>
+
+        {% if form.non_field_errors %}
+            <div class="msg error">{{ form.non_field_errors|striptags }}</div>
+        {% endif %}
+
+        <form method="post" class="form">
+            {% csrf_token %}
+
+            <div class="form-row">
+                <label>Nombre de quien recibe
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}<span class="field-error">{{ form.nombre.errors|striptags }}</span>{% endif %}
+                </label>
+                <label>Teléfono
+                    {{ form.telefono }}
+                    {% if form.telefono.errors %}<span class="field-error">{{ form.telefono.errors|striptags }}</span>{% endif %}
+                </label>
+            </div>
+
+            <label>Correo electrónico
+                {{ form.email }}
+                {% if form.email.errors %}<span class="field-error">{{ form.email.errors|striptags }}</span>{% endif %}
+            </label>
+
+            <div class="form-row">
+                <label>Modalidad
+                    {{ form.modalidad }}
+                    {% if form.modalidad.errors %}<span class="field-error">{{ form.modalidad.errors|striptags }}</span>{% endif %}
+                </label>
+                <label>Fecha y hora de entrega
+                    {{ form.fecha_entrega }}
+                    {% if form.fecha_entrega.errors %}<span class="field-error">{{ form.fecha_entrega.errors|striptags }}</span>{% endif %}
+                </label>
+            </div>
+
+            <label>Dirección de despacho
+                {{ form.direccion_entrega }}
+                <span class="form-hint">Solo si elegiste despacho a domicilio.</span>
+                {% if form.direccion_entrega.errors %}<span class="field-error">{{ form.direccion_entrega.errors|striptags }}</span>{% endif %}
+            </label>
+
+            <label>Personalización del pedido
+                {{ form.descripcion_diseno }}
+            </label>
+
+            <label>Forma de pago del anticipo
+                {{ form.metodo_pago }}
+                {% if form.metodo_pago.errors %}<span class="field-error">{{ form.metodo_pago.errors|striptags }}</span>{% endif %}
+            </label>
+
+            <label class="checkbox">
+                {{ form.acepta_terminos }}
+                <span>Acepto las condiciones y el plazo mínimo de 48 horas.</span>
+            </label>
+            {% if form.acepta_terminos.errors %}
+                <span class="field-error">{{ form.acepta_terminos.errors|striptags }}</span>
+            {% endif %}
+
+            <button class="btn btn-solid btn-lg" type="submit">Confirmar pedido</button>
+        </form>
+    </div>
+
+    <aside class="panel cart-summary">
+        <h2>Tu pedido</h2>
+        <ul class="summary-list">
+            {% for linea in lineas %}
+            <li>
+                <span>{{ linea.cantidad }} × {{ linea.producto.nombre }}</span>
+                <strong>${{ linea.subtotal|floatformat:0 }}</strong>
+            </li>
+            {% endfor %}
+        </ul>
+        <dl class="totales">
+            <dt>Productos</dt><dd>${{ carrito_total|floatformat:0 }}</dd>
+            <dt>Despacho (si aplica)</dt><dd>${{ costo_despacho|floatformat:0 }}</dd>
+            <dt>Total estimado</dt><dd>${{ total_con_despacho|floatformat:0 }}</dd>
+        </dl>
+
+        <div class="info-box mt">
+            <h3>Pago del anticipo</h3>
+            <p class="muted small">
+                Transferencia a Dulce Arte · RUT 76.543.210-8 · Banco Estado ·
+                cuenta corriente 12345678. Envía el comprobante a
+                contacto@dulcearte.cl con tu código de pedido.
+            </p>
+            <p class="muted small">
+                También puedes pagar en tienda con efectivo o tarjeta al retirar.
+            </p>
+        </div>
+
+        <p class="muted small mt">
+            Cupo diario limitado a 6 pedidos. Si la fecha elegida está completa,
+            el sistema te pedirá otra.
+        </p>
+    </aside>
+</section>
+{% endblock %}

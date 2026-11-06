@@ -17,7 +17,7 @@
             <img class="brand-logo" src="{% static 'IMAGES/logo.svg' %}" alt="">
             <span class="brand-text">
                 <strong>Dulce Arte</strong>
-                <small>Pedidos con trazabilidad</small>
+                <small>Pastelería artesanal</small>
             </span>
         </a>
 
@@ -30,6 +30,10 @@
             </nav>
 
             <div class="topbar-actions">
+                <a class="cart-link" href="{% url 'carrito' %}" aria-label="Carrito de compras">
+                    <span class="cart-icon" aria-hidden="true">🛍</span>
+                    <span class="cart-count">{{ carrito_unidades }}</span>
+                </a>
                 <details class="usermenu">
                     <summary class="userchip" aria-label="Menú de {{ user.username }}">
                         <span class="avatar">{{ user.username|first|upper }}</span>
@@ -42,8 +46,12 @@
                     <div class="usermenu-panel">
                         <p class="usermenu-head">{{ user.email|default:user.username }}</p>
                         <a href="{% url 'home' %}">Mi panel</a>
-                        <a href="/api/" target="_blank" rel="noopener">API REST</a>
+                        {% if rol == 'cliente' %}
+                            <a href="{% url 'mis_pedidos' %}">Mis pedidos</a>
+                        {% endif %}
+                        <a href="{% url 'carrito' %}">Mi carrito</a>
                         {% if rol == 'admin' %}
+                            <a href="/api/" target="_blank" rel="noopener">API administrativa</a>
                             <a href="/admin/" target="_blank" rel="noopener">Administración</a>
                         {% endif %}
                         <form method="post" action="{% url 'logout' %}">
@@ -55,12 +63,20 @@
             </div>
         {% else %}
             <nav class="nav" aria-label="Sitio">
+                <a class="nav-link {% if request.resolver_match.url_name == 'tienda' %}is-active{% endif %}"
+                   href="{% url 'tienda' %}">Tienda</a>
                 <a class="nav-link" href="{% url 'quienes_somos' %}">Quiénes somos</a>
                 <a class="nav-link" href="{% url 'servicios' %}">Servicios</a>
+                <a class="nav-link" href="{% url 'seguimiento' %}">Seguir pedido</a>
                 <a class="nav-link" href="{% url 'contacto' %}">Contacto</a>
             </nav>
             <div class="topbar-actions">
-                <a class="btn btn-solid" href="{% url 'login' %}">Ingresar</a>
+                <a class="cart-link" href="{% url 'carrito' %}" aria-label="Carrito de compras">
+                    <span class="cart-icon" aria-hidden="true">🛍</span>
+                    <span class="cart-count">{{ carrito_unidades }}</span>
+                </a>
+                <a class="btn btn-ghost btn-mini" href="{% url 'registro' %}">Crear cuenta</a>
+                <a class="btn btn-solid btn-mini" href="{% url 'login' %}">Ingresar</a>
             </div>
         {% endif %}
     </div>
@@ -84,29 +100,31 @@
             <img class="brand-logo" src="{% static 'IMAGES/logo.svg' %}" alt="">
             <div>
                 <strong>Dulce Arte</strong>
-                <p>Cada pedido, desde la receta hasta la entrega, queda registrado.</p>
+                <p>Pastelería artesanal con pedidos agendados y trazabilidad completa.</p>
             </div>
         </div>
 
         <div class="footer-col">
-            <h3>El taller</h3>
+            <h3>La tienda</h3>
+            <a href="{% url 'tienda' %}">Catálogo</a>
             <a href="{% url 'quienes_somos' %}">Quiénes somos</a>
             <a href="{% url 'servicios' %}">Servicios</a>
             <a href="{% url 'contacto' %}">Contacto</a>
         </div>
 
         <div class="footer-col">
-            <h3>Sistema</h3>
+            <h3>Tu pedido</h3>
+            <a href="{% url 'seguimiento' %}">Seguir un pedido</a>
+            <a href="{% url 'carrito' %}">Carrito</a>
             {% if user.is_authenticated %}
-                <a href="{% url 'pedidos' %}">Pedidos</a>
-                <a href="{% url 'home' %}">Mi panel</a>
-                <a href="/api/" target="_blank" rel="noopener">API REST</a>
-                {% if rol == 'admin' %}
-                    <a href="/admin/" target="_blank" rel="noopener">Administración</a>
+                {% if rol == 'cliente' %}
+                    <a href="{% url 'mis_pedidos' %}">Mis pedidos</a>
+                {% else %}
+                    <a href="{% url 'home' %}">Panel interno</a>
                 {% endif %}
             {% else %}
-                <a href="{% url 'login' %}">Ingresar al sistema</a>
-                <a href="/admin/" target="_blank" rel="noopener">Administración</a>
+                <a href="{% url 'registro' %}">Crear cuenta</a>
+                <a href="{% url 'login' %}">Ingresar</a>
             {% endif %}
         </div>
 
@@ -115,12 +133,15 @@
             <p>Av. Pastelería 123, Temuco</p>
             <p>Lunes a sábado, 09:00 a 19:00</p>
             <a href="mailto:contacto@dulcearte.cl">contacto@dulcearte.cl</a>
+            {% if rol == 'admin' %}
+                <a href="/admin/" target="_blank" rel="noopener">Administración</a>
+            {% endif %}
         </div>
     </div>
 
     <div class="footer-bottom">
         <span>© {% now "Y" %} Dulce Arte</span>
-        <span>Evaluación 3 · Desarrollo Backend</span>
+        <span>Pedidos con 48 h de anticipación · Retiro y despacho</span>
     </div>
 </footer>
 

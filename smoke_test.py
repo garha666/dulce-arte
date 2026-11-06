@@ -1,75 +1,116 @@
-"""Prueba rápida de humo: páginas, API y regla del Kanban/BOM."""
+"""Prueba rápida de humo: páginas, tienda, API administrativa y reglas de negocio.
+
+No deja datos: las pruebas de flujo corren dentro de una transacción con rollback.
+"""
 
 import os
+from datetime import timedelta
+from decimal import Decimal
 
 import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "drf.settings")
 django.setup()
 
+from django.contrib.auth.models import User  # noqa: E402
+from django.core.exceptions import ValidationError  # noqa: E402
+from django.db import transaction  # noqa: E402
 from django.test import Client  # noqa: E402
+from django.utils import timezone  # noqa: E402
 
-from api.models import Insumo, MovimientoInsumo, Pedido  # noqa: E402
+from api.models import Cliente, Insumo, Pago, Pedido, PedidoDetalle, Producto  # noqa: E402
 
-cliente = Client(SERVER_NAME="localhost")
 
-login_ok = cliente.login(username="admin", password="Dulce2026!")
-print("Login:", login_ok)
-if not login_ok:
-    raise SystemExit(
-        "No se pudo iniciar sesión con admin/Dulce2026!. "
-        "Ejecuta python seed_data.py o revisa las credenciales."
-    )
-
-rutas = [
-    "/", "/kanban/", "/pedidos/", "/inventario/", "/despachos/",
-    "/quienes-somos/", "/servicios/", "/contacto/", "/api/", "/api/pedidos/",
-]
-for ruta in rutas:
+def revisar(ruta, esperado, cliente, etiqueta=""):
     respuesta = cliente.get(ruta)
-    print(f"{ruta:22} -> {respuesta.status_code}")
-    if respuesta.status_code != 200:
-        raise SystemExit(f"La ruta {ruta} respondió {respuesta.status_code}, se esperaba 200.")
+    print(f"{etiqueta or ruta:34} -> {respuesta.status_code}")
+    if respuesta.status_code != esperado:
+        raise SystemExit(
+            f"{etiqueta or ruta} respondió {respuesta.status_code}, se esperaba {esperado}."
+        )
 
-# ---- Regla de negocio: pasar a 'preparacion' descuenta insumos (BOM) ----
-pedido = Pedido.objects.filter(estado="recibido").first()
-if not pedido:
-    raise SystemExit(
-        "No hay pedidos en estado 'recibido' para probar la transición central. "
-        "Ejecuta python seed_data.py o crea un pedido nuevo antes de la prueba."
-    )
 
+publico = Client(SERVER_NAME="localhost")
+producto = Producto.objects.filter(activo=True).first()
+if not producto:
+    raise SystemExit("No hay productos activos. Ejecuta python seed_data.py.")
+
+print("== Sitio público ==")
+for ruta in ["/", "/tienda/", f"/tienda/{producto.pk}/", "/seguimiento/", "/registro/", "/carrito/", "/servicios/", "/contacto/"]:
+    revisar(ruta, 200, publico)
+
+admin = User.objects.filter(username="admin").first()
+if not admin or not admin.check_password("Dulce2026!"):
+    raise SystemExit("Falta el usuario admin. Ejecuta python seed_data.py.")
+
+interno = Client(SERVER_NAME="localhost")
+if not interno.login(username="admin", password="Dulce2026!"):
+    raise SystemExit("No se pudo iniciar sesión como admin.")
+
+print("\n== Panel interno y API (admin) ==")
+for ruta in ["/kanban/", "/pedidos/", "/inventario/", "/despachos/", "/api/", "/api/pedidos/"]:
+    revisar(ruta, 200, interno)
+
+print("\n== La API queda cerrada para roles operativos ==")
+ventas = Client(SERVER_NAME="localhost")
+ventas.login(username="ventas", password="Dulce2026!")
+revisar("/api/pedidos/", 403, ventas, "ventas -> API")
+
+cocina = Client(SERVER_NAME="localhost")
+cocina.login(username="cocina", password="Dulce2026!")
+revisar("/api/pedidos/", 403, cocina, "cocina -> API")
+
+print("\n== Cliente de la tienda ==")
+cliente_web = Client(SERVER_NAME="localhost")
+if not cliente_web.login(username="cliente", password="Cliente2026!"):
+    raise SystemExit("Falta el cliente demo. Ejecuta python seed_data.py.")
+revisar("/tienda/", 200, cliente_web, "cliente -> tienda")
+revisar("/mis-pedidos/", 200, cliente_web, "cliente -> mis pedidos")
+revisar("/api/productos/", 403, cliente_web, "cliente -> API")
+
+print("\n== Reglas de negocio (con rollback) ==")
+cliente = Cliente.objects.filter(nombre__startswith="María").first()
 harina = Insumo.objects.get(nombre="Harina sin polvos")
+producto_chocolate = Producto.objects.get(nombre="Torta de chocolate")
 antes = harina.stock_actual
 
-respuesta = cliente.post(
-    f"/api/pedidos/{pedido.pk}/cambiar_estado/",
-    data={"estado": "preparacion"},
-    content_type="application/json",
-)
-harina.refresh_from_db()
-pedido.refresh_from_db()
+try:
+    with transaction.atomic():
+        pedido = Pedido.objects.create(
+            cliente=cliente,
+            canal="mostrador",
+            modalidad="retiro",
+            fecha_entrega=timezone.localtime() + timedelta(days=3),
+            creado_por=admin,
+        )
+        PedidoDetalle.objects.create(
+            pedido=pedido, producto=producto_chocolate, cantidad=1
+        )
+        Pago.objects.create(
+            pedido=pedido, monto=Decimal("5000"), metodo="efectivo"
+        )
 
-print(f"\nCambio de estado -> HTTP {respuesta.status_code}")
-print(f"Estado nuevo: {pedido.estado} | insumos descontados: {pedido.insumos_descontados}")
-print(f"Stock harina: {antes} -> {harina.stock_actual}")
-print(f"Movimientos de consumo: {MovimientoInsumo.objects.filter(tipo='consumo').count()}")
+        try:
+            pedido.cambiar_estado("preparacion", usuario=admin)
+            raise SystemExit("Se permitió preparar sin confirmar el pedido.")
+        except ValidationError:
+            print("Preparar sin confirmar          -> rechazado (correcto)")
 
-if respuesta.status_code != 200:
-    raise SystemExit(f"El cambio de estado respondió {respuesta.status_code}, se esperaba 200.")
-if pedido.estado != "preparacion" or not pedido.insumos_descontados:
-    raise SystemExit("El pedido no quedó en preparación con los insumos descontados.")
-if harina.stock_actual >= antes:
-    raise SystemExit("El stock de harina no disminuyó después del descuento del BOM.")
+        pedido.cambiar_estado("confirmado", usuario=admin)
+        pedido.cambiar_estado("preparacion", usuario=admin)
+        harina.refresh_from_db()
+        print(f"Confirmado + preparación        -> stock {antes} -> {harina.stock_actual}")
+        if harina.stock_actual >= antes:
+            raise SystemExit("El BOM no descontó insumos al preparar.")
 
-# Transición inválida: debe responder 400
-invalida = cliente.post(
-    f"/api/pedidos/{pedido.pk}/cambiar_estado/",
-    data={"estado": "entregado"},
-    content_type="application/json",
-)
-print(f"Transición inválida -> HTTP {invalida.status_code} ({invalida.json()})")
-if invalida.status_code != 400:
-    raise SystemExit(
-        f"La transición inválida respondió {invalida.status_code}, se esperaba 400."
-    )
+        pedido.cambiar_estado("cancelado", usuario=admin)
+        harina.refresh_from_db()
+        print(f"Cancelación repone insumos      -> stock {harina.stock_actual}")
+        if harina.stock_actual != antes:
+            raise SystemExit("La cancelación no repuso los insumos.")
+
+        transaction.set_rollback(True)
+except SystemExit:
+    raise
+
+print("\nPrueba de humo completada sin errores.")

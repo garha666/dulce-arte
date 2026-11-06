@@ -1,4 +1,4 @@
-"""Pruebas automáticas del núcleo de Dulce Arte.
+"""Pruebas automáticas de Dulce Arte.
 
 Se ejecutan con:  python manage.py test api
 """
@@ -14,15 +14,18 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 from rest_framework.test import APIClient
 
 from .models import (
+    CategoriaProducto,
     Cliente,
     Despacho,
     Insumo,
     MovimientoInsumo,
+    Pago,
     Pedido,
     PedidoDetalle,
     Perfil,
@@ -30,30 +33,39 @@ from .models import (
     RecetaInsumo,
 )
 
+CLAVE = "Clave2026!"
+
+
+def fecha_valida(dias=5):
+    """Fecha futura en horario de atención (12:00, hora de Santiago)."""
+    base = timezone.localtime() + timedelta(days=dias)
+    return base.replace(hour=12, minute=0, second=0, microsecond=0)
+
 
 class BaseDulceArteTest(TestCase):
-    """Crea un escenario mínimo: usuario, insumo, producto con receta y cliente."""
+    """Escenario mínimo: roles, insumo, producto con receta y cliente con cuenta."""
 
     def setUp(self):
         self.admin = User.objects.create_user(
-            username="admin_test", password="Clave2026!", is_staff=True
+            username="admin_test", password=CLAVE, is_staff=True, is_superuser=True
         )
         Perfil.objects.create(user=self.admin, rol="admin")
 
-        self.ventas = User.objects.create_user(
-            username="ventas_test", password="Clave2026!"
-        )
+        self.ventas = User.objects.create_user(username="ventas_test", password=CLAVE)
         Perfil.objects.create(user=self.ventas, rol="ventas")
 
-        self.cocina = User.objects.create_user(
-            username="cocina_test", password="Clave2026!"
-        )
+        self.cocina = User.objects.create_user(username="cocina_test", password=CLAVE)
         Perfil.objects.create(user=self.cocina, rol="cocina")
 
         self.despacho_user = User.objects.create_user(
-            username="despacho_test", password="Clave2026!"
+            username="despacho_test", password=CLAVE
         )
         Perfil.objects.create(user=self.despacho_user, rol="despacho")
+
+        self.cliente_user = User.objects.create_user(
+            username="cliente_test", password=CLAVE, email="cliente@test.cl"
+        )
+        Perfil.objects.create(user=self.cliente_user, rol="cliente")
 
         self.harina = Insumo.objects.create(
             nombre="Harina test",
@@ -62,47 +74,79 @@ class BaseDulceArteTest(TestCase):
             stock_minimo=Decimal("100"),
             costo_unitario=Decimal("2"),
         )
+        self.categoria = CategoriaProducto.objects.create(nombre="Tortas test")
         self.producto = Producto.objects.create(
-            nombre="Torta test", precio_base=Decimal("10000"), porciones=8
+            nombre="Torta test",
+            precio_base=Decimal("10000"),
+            porciones=8,
+            categoria=self.categoria,
         )
         RecetaInsumo.objects.create(
             producto=self.producto, insumo=self.harina, cantidad=Decimal("250")
         )
         self.cliente = Cliente.objects.create(
-            nombre="Cliente test", telefono="+56900000000"
+            user=self.cliente_user,
+            nombre="Cliente test",
+            telefono="+56900000000",
+            email="cliente@test.cl",
         )
 
-    def crear_pedido(self, cantidad=1, estado="recibido"):
+    def crear_pedido(
+        self,
+        cantidad=1,
+        estado="recibido",
+        modalidad="retiro",
+        cliente=None,
+    ):
         pedido = Pedido.objects.create(
-            cliente=self.cliente,
-            fecha_entrega=timezone.now() + timedelta(days=2),
+            cliente=cliente or self.cliente,
+            modalidad=modalidad,
+            fecha_entrega=fecha_valida(),
             creado_por=self.admin,
             estado=estado,
+            direccion_entrega="Calle 123, Temuco" if modalidad == "despacho" else "",
         )
         PedidoDetalle.objects.create(
             pedido=pedido, producto=self.producto, cantidad=cantidad
         )
         return pedido
 
-    def crear_despacho(self, pedido, confirmado=False):
-        despacho = Despacho.objects.create(
-            pedido=pedido, direccion="Calle 123, Temuco"
+    def pagar(self, pedido, monto="20000"):
+        return Pago.objects.create(
+            pedido=pedido, monto=Decimal(monto), metodo="transferencia"
         )
-        if confirmado:
-            despacho.fecha_entrega = timezone.now()
-            despacho.receptor_nombre = "Receptora"
-            despacho.comprobante = "comprobantes/test.png"
-            despacho.save(
-                update_fields=["fecha_entrega", "receptor_nombre", "comprobante"]
-            )
-        return despacho
+
+    def confirmar(self, pedido):
+        self.pagar(pedido)
+        return pedido.cambiar_estado("confirmado", usuario=self.ventas)
 
 
-class KanbanTest(BaseDulceArteTest):
-    def test_transicion_valida_descuenta_bom_una_sola_vez(self):
+class FlujoPedidoTest(BaseDulceArteTest):
+    def test_no_se_prepara_sin_confirmar(self):
         pedido = self.crear_pedido()
+        with self.assertRaises(ValidationError):
+            pedido.cambiar_estado("preparacion", usuario=self.cocina)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "recibido")
 
-        pedido.cambiar_estado("preparacion", usuario=self.admin)
+    def test_no_se_confirma_sin_pago(self):
+        pedido = self.crear_pedido()
+        with self.assertRaises(ValidationError):
+            pedido.cambiar_estado("confirmado", usuario=self.ventas)
+
+    def test_confirmar_marca_responsable(self):
+        pedido = self.crear_pedido()
+        self.confirmar(pedido)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "confirmado")
+        self.assertEqual(pedido.confirmado_por, self.ventas)
+        self.assertIsNotNone(pedido.confirmado_en)
+
+    def test_descuenta_bom_una_sola_vez(self):
+        pedido = self.crear_pedido()
+        self.confirmar(pedido)
+
+        pedido.cambiar_estado("preparacion", usuario=self.cocina)
 
         self.harina.refresh_from_db()
         pedido.refresh_from_db()
@@ -113,290 +157,170 @@ class KanbanTest(BaseDulceArteTest):
             MovimientoInsumo.objects.filter(tipo="consumo", pedido=pedido).count(), 1
         )
 
-        # Volver a preparación no debe descontar de nuevo.
-        pedido.cambiar_estado("horneado", usuario=self.admin)
+        pedido.cambiar_estado("horneado", usuario=self.cocina)
         pedido.cambiar_estado("calidad", usuario=self.admin)
-        pedido.cambiar_estado("preparacion", usuario=self.admin)
+        pedido.cambiar_estado("preparacion", usuario=self.cocina)
         self.harina.refresh_from_db()
         self.assertEqual(self.harina.stock_actual, Decimal("750"))
 
-    def test_transicion_invalida_no_cambia_estado(self):
+    def test_cancelar_repone_insumos(self):
         pedido = self.crear_pedido()
+        self.confirmar(pedido)
+        pedido.cambiar_estado("preparacion", usuario=self.cocina)
 
-        with self.assertRaises(ValidationError):
-            pedido.cambiar_estado("entregado", usuario=self.admin)
+        pedido.cambiar_estado("cancelado", usuario=self.admin)
 
+        self.harina.refresh_from_db()
         pedido.refresh_from_db()
-        self.assertEqual(pedido.estado, "recibido")
+        self.assertEqual(pedido.estado, "cancelado")
         self.assertFalse(pedido.insumos_descontados)
+        self.assertEqual(self.harina.stock_actual, Decimal("1000"))
+        self.assertEqual(
+            MovimientoInsumo.objects.filter(tipo="entrada", pedido=pedido).count(), 1
+        )
 
     def test_stock_insuficiente_cancela_el_cambio(self):
         self.harina.stock_actual = Decimal("100")
         self.harina.save(update_fields=["stock_actual"])
         pedido = self.crear_pedido(cantidad=2)
+        self.confirmar(pedido)
 
         with self.assertRaises(ValidationError):
-            pedido.cambiar_estado("preparacion", usuario=self.admin)
+            pedido.cambiar_estado("preparacion", usuario=self.cocina)
 
         pedido.refresh_from_db()
         self.harina.refresh_from_db()
-        self.assertEqual(pedido.estado, "recibido")
+        self.assertEqual(pedido.estado, "confirmado")
         self.assertEqual(self.harina.stock_actual, Decimal("100"))
 
-
-class DespachoTest(BaseDulceArteTest):
-    def test_no_confirma_sin_evidencia(self):
+    def test_transicion_invalida_no_cambia_estado(self):
         pedido = self.crear_pedido()
-        despacho = Despacho(
-            pedido=pedido,
-            direccion="Calle 123",
-            fecha_entrega=timezone.now(),
-        )
-
         with self.assertRaises(ValidationError):
-            despacho.full_clean()
-
-
-class ApiPermisosTest(BaseDulceArteTest):
-    def test_ventas_no_puede_mover_kanban(self):
-        pedido = self.crear_pedido()
-        cliente = APIClient()
-        cliente.login(username="ventas_test", password="Clave2026!")
-
-        respuesta = cliente.post(
-            f"/api/pedidos/{pedido.pk}/cambiar_estado/",
-            {"estado": "preparacion"},
-            format="json",
-        )
-
-        self.assertEqual(respuesta.status_code, 403)
-
-    def test_admin_puede_mover_kanban(self):
-        pedido = self.crear_pedido()
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
-
-        respuesta = cliente.post(
-            f"/api/pedidos/{pedido.pk}/cambiar_estado/",
-            {"estado": "preparacion"},
-            format="json",
-        )
-
-        self.assertEqual(respuesta.status_code, 200)
-        self.assertEqual(respuesta.json()["estado"], "preparacion")
-
-    def test_crear_pedido_por_api_asigna_codigo(self):
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
-
-        respuesta = cliente.post(
-            "/api/pedidos/",
-            {
-                "cliente": self.cliente.pk,
-                "fecha_entrega": (timezone.now() + timedelta(days=1)).isoformat(),
-                "detalles": [{"producto": self.producto.pk, "cantidad": 1}],
-            },
-            format="json",
-        )
-
-        self.assertEqual(respuesta.status_code, 201)
-        self.assertTrue(respuesta.json()["codigo"].startswith("PED-"))
-        self.assertEqual(Decimal(respuesta.json()["total"]), Decimal("10000"))
-
-    def test_no_permite_crear_pedido_sin_detalles(self):
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
-
-        respuesta = cliente.post(
-            "/api/pedidos/",
-            {
-                "cliente": self.cliente.pk,
-                "fecha_entrega": (timezone.now() + timedelta(days=1)).isoformat(),
-                "detalles": [],
-            },
-            format="json",
-        )
-
-        self.assertEqual(respuesta.status_code, 400)
-
-    def test_estado_no_se_puede_cambiar_por_patch(self):
-        pedido = self.crear_pedido()
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
-
-        respuesta = cliente.patch(
-            f"/api/pedidos/{pedido.pk}/",
-            {"estado": "entregado"},
-            format="json",
-        )
-
-        self.assertEqual(respuesta.status_code, 200)  # el campo se ignora
+            pedido.cambiar_estado("entregado", usuario=self.admin)
         pedido.refresh_from_db()
         self.assertEqual(pedido.estado, "recibido")
 
 
-class PermisosRolApiTest(BaseDulceArteTest):
-    """La API debe respetar los mismos roles que las páginas HTML."""
-
-    def _cliente(self, username):
-        cliente = APIClient()
-        cliente.login(username=username, password="Clave2026!")
-        return cliente
-
-    def test_ventas_no_puede_descontar_insumos(self):
+class PagoTest(BaseDulceArteTest):
+    def test_estado_pago_se_calcula_desde_los_pagos(self):
         pedido = self.crear_pedido()
-        cliente = self._cliente("ventas_test")
+        self.assertEqual(pedido.estado_pago, "pendiente")
+        self.assertEqual(pedido.saldo, Decimal("10000"))
 
-        respuesta = cliente.post(
-            f"/api/pedidos/{pedido.pk}/descontar_insumos/",
-            {},
-            format="json",
-        )
+        self.pagar(pedido, "4000")
+        self.assertEqual(pedido.total_pagado, Decimal("4000"))
+        self.assertEqual(pedido.estado_pago, "parcial")
 
-        self.assertEqual(respuesta.status_code, 403)
-        pedido.refresh_from_db()
-        self.harina.refresh_from_db()
-        self.assertFalse(pedido.insumos_descontados)
-        self.assertEqual(self.harina.stock_actual, Decimal("1000"))
+        self.pagar(pedido, "6000")
+        self.assertEqual(pedido.estado_pago, "pagado")
+        self.assertEqual(pedido.saldo, Decimal("0"))
 
-    def test_cocina_no_puede_crear_pedido(self):
-        cliente = self._cliente("cocina_test")
-
-        respuesta = cliente.post("/api/pedidos/", {}, format="json")
-
-        self.assertEqual(respuesta.status_code, 403)
-
-    def test_cocina_no_puede_editar_ni_borrar_pedido(self):
+    def test_monto_debe_ser_positivo(self):
         pedido = self.crear_pedido()
-        cliente = self._cliente("cocina_test")
+        pago = Pago(pedido=pedido, monto=Decimal("0"), metodo="efectivo")
+        with self.assertRaises(ValidationError):
+            pago.full_clean()
 
-        editar = cliente.patch(
-            f"/api/pedidos/{pedido.pk}/",
-            {"descripcion_diseno": "Cambio no autorizado"},
-            format="json",
+
+class AgendaTest(BaseDulceArteTest):
+    def test_pedido_web_exige_anticipacion(self):
+        pedido = Pedido(
+            cliente=self.cliente,
+            canal="web",
+            modalidad="retiro",
+            fecha_entrega=timezone.localtime() + timedelta(hours=10),
         )
-        borrar = cliente.delete(f"/api/pedidos/{pedido.pk}/")
+        with self.assertRaises(ValidationError):
+            pedido.full_clean()
 
-        self.assertEqual(editar.status_code, 403)
-        self.assertEqual(borrar.status_code, 403)
-        pedido.refresh_from_db()
-        self.assertNotEqual(pedido.descripcion_diseno, "Cambio no autorizado")
+    def test_pedido_web_respeta_cupo_diario(self):
+        fecha = fecha_valida()
+        for _ in range(Pedido.CUPO_DIARIO):
+            Pedido.objects.create(
+                cliente=self.cliente, fecha_entrega=fecha, modalidad="retiro"
+            )
+        with self.assertRaises(ValidationError):
+            Pedido.validar_agenda(fecha, exigir_anticipacion=False)
 
-    def test_cocina_no_puede_crear_ni_gestionar_despacho(self):
-        pedido = self.crear_pedido(estado="listo")
-        despacho = self.crear_despacho(pedido)
-        cliente = self._cliente("cocina_test")
+    def test_horario_de_atencion(self):
+        fecha = fecha_valida().replace(hour=23)
+        with self.assertRaises(ValidationError):
+            Pedido.validar_agenda(fecha, exigir_anticipacion=False)
 
-        crear = cliente.post("/api/despachos/", {}, format="json")
-        editar = cliente.patch(
-            f"/api/despachos/{despacho.pk}/",
-            {"direccion": "Otra dirección"},
-            format="json",
+    def test_despacho_exige_direccion(self):
+        pedido = Pedido(
+            cliente=self.cliente,
+            modalidad="despacho",
+            fecha_entrega=fecha_valida(),
         )
-        borrar = cliente.delete(f"/api/despachos/{despacho.pk}/")
-
-        self.assertEqual(crear.status_code, 403)
-        self.assertEqual(editar.status_code, 403)
-        self.assertEqual(borrar.status_code, 403)
-
-    def test_despacho_puede_crear_despacho(self):
-        pedido = self.crear_pedido(estado="listo")
-        cliente = self._cliente("despacho_test")
-
-        respuesta = cliente.post(
-            "/api/despachos/",
-            {"pedido": pedido.pk, "direccion": "Calle 456, Temuco"},
-            format="json",
-        )
-
-        self.assertEqual(respuesta.status_code, 201)
-        self.assertTrue(Despacho.objects.filter(pedido=pedido).exists())
+        with self.assertRaises(ValidationError):
+            pedido.full_clean()
 
 
 class DespachoFlujoTest(BaseDulceArteTest):
+    def _despacho_listo(self, confirmado=False):
+        pedido = self.crear_pedido(estado="listo", modalidad="despacho")
+        despacho = Despacho.objects.create(
+            pedido=pedido, direccion="Calle 123, Temuco"
+        )
+        if confirmado:
+            despacho.fecha_entrega = timezone.now()
+            despacho.receptor_nombre = "Receptora"
+            despacho.comprobante = "comprobantes/test.png"
+            despacho.save(
+                update_fields=["fecha_entrega", "receptor_nombre", "comprobante"]
+            )
+        return pedido, despacho
+
+    def test_despacho_crear_marca_pedido_despachado(self):
+        pedido = self.crear_pedido(estado="listo", modalidad="despacho")
+        self.client.login(username="despacho_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("despacho_crear"),
+            {
+                "pedido": pedido.pk,
+                "repartidor": self.despacho_user.pk,
+                "direccion": "Calle 456, Temuco",
+                "observaciones": "",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "despachado")
+        despacho = Despacho.objects.get(pedido=pedido)
+        self.assertIsNotNone(despacho.fecha_salida)
+
     def test_no_crea_despacho_si_pedido_no_esta_listo(self):
-        pedido = self.crear_pedido(estado="recibido")
-        self.client.login(username="admin_test", password="Clave2026!")
+        pedido = self.crear_pedido(estado="confirmado", modalidad="despacho")
+        self.client.login(username="despacho_test", password=CLAVE)
 
-        respuesta = self.client.post(
-            "/despachos/crear/",
+        self.client.post(
+            reverse("despacho_crear"),
             {"pedido": pedido.pk, "direccion": "Calle 123"},
         )
 
-        self.assertEqual(respuesta.status_code, 302)
         self.assertFalse(Despacho.objects.filter(pedido=pedido).exists())
 
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
-        respuesta_api = cliente.post(
-            "/api/despachos/",
-            {"pedido": pedido.pk, "direccion": "Calle 123"},
-            format="json",
-        )
-        self.assertEqual(respuesta_api.status_code, 400)
-        self.assertFalse(Despacho.objects.filter(pedido=pedido).exists())
-
-    def test_no_permite_entregar_sin_despacho_confirmado(self):
-        pedido = self.crear_pedido(estado="listo")
+    def test_no_entregar_sin_despacho_confirmado(self):
+        pedido, despacho = self._despacho_listo()
+        pedido.cambiar_estado("despachado", usuario=self.despacho_user)
 
         with self.assertRaises(ValidationError):
-            pedido.cambiar_estado("entregado", usuario=self.admin)
+            pedido.cambiar_estado("entregado", usuario=self.despacho_user)
 
-        self.crear_despacho(pedido)
+    def test_no_confirma_sin_evidencia(self):
+        pedido = self.crear_pedido(estado="listo", modalidad="despacho")
+        despacho = Despacho(pedido=pedido, direccion="Calle 123")
+        despacho.fecha_entrega = timezone.now()
+        despacho.receptor_nombre = "Ana"
         with self.assertRaises(ValidationError):
-            pedido.cambiar_estado("entregado", usuario=self.admin)
+            despacho.full_clean()
 
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
-        respuesta = cliente.post(
-            f"/api/pedidos/{pedido.pk}/cambiar_estado/",
-            {"estado": "entregado"},
-            format="json",
-        )
-        self.assertEqual(respuesta.status_code, 400)
-        pedido.refresh_from_db()
-        self.assertEqual(pedido.estado, "listo")
-
-    def test_permite_entregar_con_despacho_confirmado(self):
-        pedido = self.crear_pedido(estado="listo")
-        self.crear_despacho(pedido, confirmado=True)
-
-        pedido.cambiar_estado("entregado", usuario=self.admin)
-
-        pedido.refresh_from_db()
-        self.assertEqual(pedido.estado, "entregado")
-
-    def test_confirmar_despacho_exige_receptor(self):
-        pedido = self.crear_pedido(estado="listo")
-        despacho = self.crear_despacho(pedido)
-        self.client.login(username="admin_test", password="Clave2026!")
-
-        respuesta = self.client.post(
-            f"/despachos/{despacho.pk}/confirmar/",
-            {"receptor_nombre": ""},
-        )
-
-        self.assertEqual(respuesta.status_code, 302)
-        despacho.refresh_from_db()
-        self.assertFalse(despacho.confirmado)
-
-    def test_confirmar_despacho_no_sobrescribe_confirmado(self):
-        pedido = self.crear_pedido(estado="listo")
-        despacho = self.crear_despacho(pedido, confirmado=True)
-        self.client.login(username="admin_test", password="Clave2026!")
-
-        respuesta = self.client.post(
-            f"/despachos/{despacho.pk}/confirmar/",
-            {"receptor_nombre": "Otra persona"},
-        )
-
-        self.assertEqual(respuesta.status_code, 302)
-        despacho.refresh_from_db()
-        self.assertEqual(despacho.receptor_nombre, "Receptora")
-
-    def test_confirmar_despacho_marca_pedido_entregado(self):
-        pedido = self.crear_pedido(estado="listo")
-        despacho = self.crear_despacho(pedido)
+    def test_confirmar_entrega_marca_pedido_entregado(self):
+        pedido, despacho = self._despacho_listo()
+        pedido.cambiar_estado("despachado", usuario=self.despacho_user)
 
         buffer = BytesIO()
         Image.new("RGB", (1, 1), "white").save(buffer, format="PNG")
@@ -406,47 +330,228 @@ class DespachoFlujoTest(BaseDulceArteTest):
 
         with TemporaryDirectory() as media:
             with override_settings(MEDIA_ROOT=media):
-                self.client.login(username="admin_test", password="Clave2026!")
+                self.client.login(username="despacho_test", password=CLAVE)
                 respuesta = self.client.post(
-                    f"/despachos/{despacho.pk}/confirmar/",
-                    {
-                        "receptor_nombre": "Ana Pérez",
-                        "comprobante": archivo,
-                    },
+                    reverse("despacho_confirmar", args=[despacho.pk]),
+                    {"receptor_nombre": "Ana Pérez", "comprobante": archivo},
                 )
 
         self.assertEqual(respuesta.status_code, 302)
         despacho.refresh_from_db()
         pedido.refresh_from_db()
         self.assertTrue(despacho.confirmado)
+        self.assertEqual(despacho.confirmado_por, self.despacho_user)
         self.assertEqual(pedido.estado, "entregado")
+
+    def test_retiro_exige_quien_retira(self):
+        pedido = self.crear_pedido(estado="listo", modalidad="retiro")
+        with self.assertRaises(ValidationError):
+            pedido.cambiar_estado("entregado", usuario=self.admin)
+
+        pedido.retirado_por = "María"
+        pedido.save(update_fields=["retirado_por"])
+        pedido.cambiar_estado("entregado", usuario=self.admin)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "entregado")
+
+
+class TiendaTest(BaseDulceArteTest):
+    def test_catalogo_publico(self):
+        respuesta = self.client.get(reverse("tienda"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Torta test")
+
+    def test_agregar_al_carrito_y_ver_carrito(self):
+        respuesta = self.client.post(
+            reverse("carrito_agregar", args=[self.producto.pk]),
+            {"cantidad": 2, "personalizacion": "Sin azúcar"},
+        )
+        self.assertEqual(respuesta.status_code, 302)
+
+        carrito = self.client.get(reverse("carrito"))
+        self.assertContains(carrito, "Torta test")
+        self.assertContains(carrito, "Sin azúcar")
+
+    def test_checkout_crea_pedido_web(self):
+        self.client.post(
+            reverse("carrito_agregar", args=[self.producto.pk]), {"cantidad": 1}
+        )
+
+        respuesta = self.client.post(
+            reverse("checkout"),
+            {
+                "nombre": "Cliente test",
+                "telefono": "+56900000000",
+                "email": "cliente@test.cl",
+                "modalidad": "retiro",
+                "direccion_entrega": "",
+                "fecha_entrega": fecha_valida().strftime("%Y-%m-%dT%H:%M"),
+                "descripcion_diseno": "Con dedicatoria",
+                "metodo_pago": "transferencia",
+                "acepta_terminos": "on",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        pedido = Pedido.objects.get(canal="web")
+        self.assertEqual(pedido.estado, "recibido")
+        self.assertEqual(pedido.cliente, self.cliente)
+        self.assertEqual(pedido.estado_pago, "pendiente")
+        self.assertRedirects(
+            respuesta, reverse("seguimiento_detalle", args=[pedido.token_seguimiento])
+        )
+
+    def test_checkout_rechaza_fecha_sin_anticipacion(self):
+        self.client.post(
+            reverse("carrito_agregar", args=[self.producto.pk]), {"cantidad": 1}
+        )
+        temprano = timezone.localtime() + timedelta(hours=12)
+
+        respuesta = self.client.post(
+            reverse("checkout"),
+            {
+                "nombre": "Cliente test",
+                "telefono": "+56900000000",
+                "email": "cliente@test.cl",
+                "modalidad": "retiro",
+                "fecha_entrega": temprano.strftime("%Y-%m-%dT%H:%M"),
+                "metodo_pago": "efectivo",
+                "acepta_terminos": "on",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertFalse(Pedido.objects.filter(canal="web").exists())
+
+    def test_seguimiento_por_token(self):
+        pedido = self.crear_pedido()
+        respuesta = self.client.get(
+            reverse("seguimiento_detalle", args=[pedido.token_seguimiento])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, pedido.codigo)
+        self.assertNotContains(respuesta, "+56900000000")
+
+    def test_registro_crea_cuenta_cliente(self):
+        respuesta = self.client.post(
+            reverse("registro"),
+            {
+                "nombre": "Nueva",
+                "apellido": "Clienta",
+                "username": "nueva_clienta",
+                "email": "nueva@test.cl",
+                "telefono": "+56911111111",
+                "password1": "Secreta2026!",
+                "password2": "Secreta2026!",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 302)
+        user = User.objects.get(username="nueva_clienta")
+        self.assertEqual(user.perfil.rol, "cliente")
+        self.assertEqual(user.cliente.telefono, "+56911111111")
+
+    def test_mis_pedidos_solo_muestra_los_propios(self):
+        propio = self.crear_pedido()
+        otro_cliente = Cliente.objects.create(nombre="Otra", telefono="+56922222222")
+        ajeno = self.crear_pedido(cliente=otro_cliente)
+
+        self.client.login(username="cliente_test", password=CLAVE)
+        respuesta = self.client.get(reverse("mis_pedidos"))
+
+        self.assertContains(respuesta, propio.codigo)
+        self.assertNotContains(respuesta, ajeno.codigo)
+
+    def test_no_puede_ver_pedido_ajeno(self):
+        otro_cliente = Cliente.objects.create(nombre="Otra", telefono="+56922222222")
+        ajeno = self.crear_pedido(cliente=otro_cliente)
+
+        self.client.login(username="cliente_test", password=CLAVE)
+        respuesta = self.client.get(reverse("pedido_detalle", args=[ajeno.pk]))
+
+        self.assertEqual(respuesta.status_code, 302)
+
+
+class ApiSoloAdminTest(BaseDulceArteTest):
+    def _api(self, username):
+        cliente = APIClient()
+        cliente.login(username=username, password=CLAVE)
+        return cliente
+
+    def test_anonimo_no_accede_a_la_api(self):
+        respuesta = APIClient().get("/api/pedidos/")
+        self.assertIn(respuesta.status_code, (401, 403))
+
+    def test_roles_operativos_no_leen_la_api(self):
+        for username in ("ventas_test", "cocina_test", "despacho_test"):
+            respuesta = self._api(username).get("/api/pedidos/")
+            self.assertEqual(respuesta.status_code, 403, username)
+
+    def test_cliente_no_accede_a_la_api(self):
+        respuesta = self._api("cliente_test").get("/api/productos/")
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_admin_administra_la_api(self):
+        respuesta = self._api("admin_test").get("/api/productos/")
+        self.assertEqual(respuesta.status_code, 200)
+
+    def test_admin_mueve_kanban_por_api(self):
+        pedido = self.crear_pedido()
+        self.pagar(pedido)
+        pedido.cambiar_estado("confirmado", usuario=self.ventas)
+
+        respuesta = self._api("admin_test").post(
+            f"/api/pedidos/{pedido.pk}/cambiar_estado/",
+            {"estado": "preparacion"},
+            format="json",
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.json()["estado"], "preparacion")
+
+    def test_no_permite_crear_pedido_sin_detalles(self):
+        respuesta = self._api("admin_test").post(
+            "/api/pedidos/",
+            {
+                "cliente": self.cliente.pk,
+                "fecha_entrega": fecha_valida().isoformat(),
+                "detalles": [],
+            },
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+
+    def test_estado_no_se_puede_cambiar_por_patch(self):
+        pedido = self.crear_pedido()
+        respuesta = self._api("admin_test").patch(
+            f"/api/pedidos/{pedido.pk}/", {"estado": "entregado"}, format="json"
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "recibido")
 
 
 class BomProteccionTest(BaseDulceArteTest):
     def test_no_edita_pedido_con_insumos_descontados(self):
         pedido = self.crear_pedido()
-        pedido.cambiar_estado("preparacion", usuario=self.admin)
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
+        self.confirmar(pedido)
+        pedido.cambiar_estado("preparacion", usuario=self.cocina)
 
+        cliente = APIClient()
+        cliente.login(username="admin_test", password=CLAVE)
         respuesta = cliente.patch(
             f"/api/pedidos/{pedido.pk}/",
-            {"descripcion_diseno": "Cambio posterior al BOM"},
+            {"descripcion_diseno": "Cambio posterior"},
             format="json",
         )
-
         self.assertEqual(respuesta.status_code, 400)
-        pedido.refresh_from_db()
-        self.assertNotEqual(
-            pedido.descripcion_diseno, "Cambio posterior al BOM"
-        )
 
     def test_no_elimina_pedido_con_insumos_descontados(self):
         pedido = self.crear_pedido()
-        pedido.cambiar_estado("preparacion", usuario=self.admin)
-        cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
+        self.confirmar(pedido)
+        pedido.cambiar_estado("preparacion", usuario=self.cocina)
 
+        cliente = APIClient()
+        cliente.login(username="admin_test", password=CLAVE)
         respuesta = cliente.delete(f"/api/pedidos/{pedido.pk}/")
 
         self.assertEqual(respuesta.status_code, 400)
@@ -455,22 +560,77 @@ class BomProteccionTest(BaseDulceArteTest):
     def test_permite_editar_antes_del_bom(self):
         pedido = self.crear_pedido()
         cliente = APIClient()
-        cliente.login(username="admin_test", password="Clave2026!")
+        cliente.login(username="admin_test", password=CLAVE)
 
         respuesta = cliente.patch(
             f"/api/pedidos/{pedido.pk}/",
             {"descripcion_diseno": "Ajuste de cotización"},
             format="json",
         )
-
         self.assertEqual(respuesta.status_code, 200)
 
 
-class FrontendSeguridadTest(SimpleTestCase):
-    def test_pedidos_js_escapa_cliente_nombre(self):
-        ruta = Path(settings.BASE_DIR) / "static" / "js" / "pedidos.js"
-        contenido = ruta.read_text(encoding="utf-8")
+class PaginasInternasTest(BaseDulceArteTest):
+    def test_cocina_entra_al_kanban(self):
+        self.client.login(username="cocina_test", password=CLAVE)
+        respuesta = self.client.get(reverse("kanban"))
+        self.assertEqual(respuesta.status_code, 200)
 
-        self.assertIn("function escapeHtml", contenido)
-        self.assertIn("escapeHtml(p.cliente_nombre)", contenido)
-        self.assertNotIn("<td>${p.cliente_nombre}</td>", contenido)
+    def test_cliente_no_entra_al_kanban(self):
+        self.client.login(username="cliente_test", password=CLAVE)
+        respuesta = self.client.get(reverse("kanban"))
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_ventas_registra_pedido_por_formulario(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        respuesta = self.client.post(
+            reverse("pedido_crear"),
+            {
+                "cliente": self.cliente.pk,
+                "canal": "mostrador",
+                "modalidad": "retiro",
+                "fecha_entrega": fecha_valida().strftime("%Y-%m-%dT%H:%M"),
+                "direccion_entrega": "",
+                "telefono_contacto": "+56900000000",
+                "descripcion_diseno": "Pedido de mostrador",
+                "costo_despacho": "0",
+                "observaciones": "",
+                "producto": self.producto.pk,
+                "cantidad": 1,
+                "personalizacion": "",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertTrue(Pedido.objects.filter(descripcion_diseno="Pedido de mostrador").exists())
+
+    def test_ventas_registra_pago(self):
+        pedido = self.crear_pedido()
+        self.client.login(username="ventas_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("pedido_registrar_pago", args=[pedido.pk]),
+            {
+                "monto": "5000",
+                "metodo": "efectivo",
+                "tipo": "anticipo",
+                "referencia": "Caja 1",
+            },
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertEqual(pedido.total_pagado, Decimal("5000"))
+
+
+class FrontendSeguridadTest(SimpleTestCase):
+    def test_panel_interno_no_usa_la_api(self):
+        base = Path(settings.BASE_DIR) / "templates"
+        for nombre in ("pedidos.html", "kanban.html", "despachos.html", "pedido_detalle.html"):
+            contenido = (base / nombre).read_text(encoding="utf-8")
+            self.assertNotIn("/api/", contenido, nombre)
+            self.assertNotIn("fetch(", contenido, nombre)
+
+    def test_scripts_obsoletos_eliminados(self):
+        js = Path(settings.BASE_DIR) / "static" / "js"
+        self.assertFalse((js / "pedidos.js").exists())
+        self.assertFalse((js / "kanban.js").exists())

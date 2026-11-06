@@ -14,125 +14,140 @@ python seed_data.py
 python manage.py runserver
 ```
 
-- Abrir `http://127.0.0.1:8000/` y dejar una pestaña con `/admin/` y otra con `/api/`.
-- Usuario `admin` / `Dulce2026!`.
-- Tener a mano `api/models.py`, `api/admin.py` y `api/views.py`.
+- Abrir `http://127.0.0.1:8000/` y dejar pestañas con `/tienda/`, `/admin/` y `/api/`.
+- Usuario interno `admin` / `Dulce2026!`; cliente demo `cliente` / `Cliente2026!`.
+- Tener a mano `api/models.py`, `api/views.py`, `api/carrito.py` y `api/forms.py`.
 
 > En EC2: reemplazar `127.0.0.1:8000` por `http://IP_ELASTICA/`.
 
 ## 1. Presentación (1 min)
 
-> "Dulce Arte es una pastelería artesanal. El problema es que los pedidos personalizados se
-> coordinaban por cuaderno: se perdían fechas, se compraban insumos de más y no quedaba
-> evidencia de la entrega. La solución es un sistema Django + DRF + PostgreSQL con cuatro
-> funcionalidades: cotización, tablero Kanban, descuento de insumos por receta y despacho
-> con confirmación."
+> "Dulce Arte es una pastelería artesanal que trabaja a pedido. Antes se coordinaba todo por
+> cuaderno: se perdían fechas, se compraban insumos de más y no quedaba evidencia de la
+> entrega. Ahora es una tienda en línea con agenda limitada: el cliente compra, paga un
+> anticipo y sigue su pedido; el equipo trabaja en un panel interno con producción, insumos y
+> despacho. La API REST quedó reservada a administración."
 
-## 2. Sitio público y login (1 min)
+## 2. Tienda pública y carrito (2 min)
 
-1. Abrir `/` → landing pública; luego `/quienes-somos/`, `/servicios/` y `/contacto/`.
-2. Enviar el formulario de contacto → mensaje de éxito.
-3. Señalar que la barra pública solo muestra **Ingresar**; **Admin** está en el footer y **API**
-   aparece en el menú de usuario después de iniciar sesión.
-4. Entrar con `admin` / `Dulce2026!`.
+1. Abrir `/` → landing con productos y los pasos del pedido.
+2. Ir a `/tienda/` → filtrar por categoría y mostrar la disponibilidad calculada.
+3. Abrir un producto → ingredientes de la receta y campo de personalización.
+4. Agregar al carrito con cantidad y una dedicatoria; abrir `/carrito/`.
+5. Cambiar la cantidad y mostrar que el subtotal se recalcula.
 
-> "El sitio público no requiere sesión; el panel de gestión y la API sí
-> (`IsAuthenticated` en `settings.py`). La landing es pública a propósito."
+> "El catálogo solo muestra productos activos. `Producto.unidades_disponibles` se calcula con
+> el stock de los insumos de su receta; si no alcanza para una unidad, el producto aparece sin
+> stock y no se puede agregar. El carrito vive en la sesión (`api/carrito.py`) y **nunca**
+> guarda el precio: cada vez que se muestra se lee el precio vigente del catálogo."
 
-## 3. Cotización de un pedido (2 min)
+## 3. Checkout y agenda (2 min)
 
-1. Ir a **Pedidos**.
-2. Elegir cliente, fecha de entrega, producto y cantidad; escribir un diseño.
-3. Registrar → aparece en la tabla con código `PED-000xx`, estado *Recibido* y total calculado.
-4. Abrir el detalle del pedido → mostrar total, anticipo y saldo.
+1. Ir a **Continuar al checkout**.
+2. Mostrar que la fecha mínima es 48 horas adelante; elegir retiro o despacho.
+3. Completar datos y confirmar → redirección al seguimiento con código `PED-000xx`.
+4. (Opcional) Intentar una fecha dentro de 24 horas → el sistema la rechaza y explica el plazo.
+5. Mencionar cupo diario de 6 y horario 09:00–18:59 de Santiago.
 
-> "El pedido se crea por `POST /api/pedidos/`. El total se calcula en el modelo
-> (`Pedido.total` = suma de subtotales + despacho; `saldo` = total − anticipo). El precio
-> unitario se copia al detalle para conservar el precio histórico aunque el producto suba."
+> "La agenda no es un adorno: `Pedido.validar_agenda` exige 48 horas para pedidos web, horario
+> de atención y un cupo diario de 6 pedidos no cancelados. El cupo se cuenta con un rango de
+> fecha local, no con `__date`, porque esa conversión aplica UTC y desplaza el día en Santiago.
+> El checkout valida stock y agenda antes de crear el pedido, todo dentro de
+> `transaction.atomic`; si algo falla, no queda nada a medias."
 
-## 4. Tablero Kanban y trazabilidad (2 min)
+## 4. Seguimiento y cuenta de cliente (1,5 min)
 
-1. Ir a **Cocina (Kanban)**.
-2. Mover el pedido nuevo a *En preparación* → la tarjeta cambia de columna.
-3. Abrir el detalle → el historial muestra el cambio con usuario y fecha.
+1. En la página de seguimiento, copiar el código o el enlace con token.
+2. Cerrar sesión / abrir ventana incógnita y buscar el pedido → se ve el avance sin datos
+   personales.
+3. Ingresar como `cliente` / `Cliente2026!` → `/mis-pedidos/` muestra solo sus pedidos.
+4. Abrir el detalle de un pedido propio.
 
-> "Las transiciones están en `Pedido.TRANSICIONES` y solo se pueden ejecutar por
-> `Pedido.cambiar_estado`. Si se pide una transición inválida, la API responde 400 y el
-> pedido no cambia. Cada cambio queda en `HistorialEstado`."
+> "El seguimiento público funciona por código o por token. Nombre, teléfono y dirección solo se
+> muestran al dueño del pedido o al personal interno (`_puede_ver_contacto`). El registro crea
+> el `User`, el `Perfil` con rol cliente y la ficha `Cliente` vinculada; `mis-pedidos` filtra
+> por esa ficha, así que un cliente nunca ve pedidos ajenos."
 
-4. (Opcional, evidencia técnica) En la consola:
+## 5. Panel interno y pagos (2 min)
+
+1. Entrar con `admin` / `Dulce2026!` → panel con métricas y pedidos web nuevos.
+2. Ir a **Pedidos** → abrir el pedido recién creado.
+3. Mostrar que está **Recibido** y con pago pendiente.
+4. Intentar pasarlo a **Confirmado** sin pago → error.
+5. Registrar un pago (efectivo o transferencia) y luego confirmar.
+6. Mostrar el cambio de estado y el historial con usuario y fecha.
+
+> "El pedido no entra a producción sin pago. `Pago` es un registro real con monto, método, tipo
+> y responsable; `total_pagado`, `estado_pago` y `saldo` se calculan desde esos registros. El
+> anticipo antiguo quedó solo como respaldo histórico. La transición a `confirmado` valida
+> `estado_pago != pendiente` en `Pedido.cambiar_estado`."
+
+## 6. Kanban y BOM (2 min)
+
+1. Anotar el stock de **Harina sin polvos** en `/inventario/`.
+2. Ir a `/kanban/` y mover el pedido a **En preparación**.
+3. Refrescar inventario → el stock bajó por la receta × cantidad.
+4. Mostrar el detalle del pedido: “insumos descontados” e historial.
+5. (Opcional) Cancelar un pedido preparado → el stock se repone con un movimiento de entrada.
+
+> "El BOM es `RecetaInsumo` (producto ↔ insumo ↔ cantidad). El descuento ocurre una sola vez
+> por la bandera `insumos_descontados`, con `transaction.atomic` y `select_for_update`. Si falta
+> stock, se revierte todo y se listan los faltantes. Cancelar ejecuta `reponer_insumos`, que
+> devuelve lo consumido y deja el movimiento de entrada como evidencia."
+
+## 7. Despacho y retiro (1,5 min)
+
+1. Ir a **Despachos** → asignar ruta a un pedido **Listo** con modalidad despacho.
+2. Mostrar que el pedido pasó a **Despachado** y tiene fecha de salida.
+3. Intentar confirmar sin evidencia o sin receptor → error.
+4. Adjuntar una imagen como comprobante, escribir quién recibe y confirmar → **Entregado**.
+5. En **Retiros pendientes**, escribir quién retira y cerrar un pedido de retiro.
+
+> "Crear la ruta ya no entrega el pedido: lo deja en `despachado`. La entrega se cierra con
+> receptor y firma o comprobante (`Despacho.clean`), y el retiro exige `retirado_por`. Ambas
+> transiciones son atómicas y quedan en el historial."
+
+## 8. API administrativa y cierre técnico (1 min)
+
+1. `/admin/` → cabecera, filtros, inlines del detalle y del BOM, y pagos.
+2. `/api/` → navegador DRF con sesión de `admin`.
+3. Cerrar sesión, entrar como `ventas` y abrir `/api/pedidos/` → **403**.
+4. Mostrar que `/pedidos/` y `/kanban/` funcionan por formularios, sin `fetch`.
+
+> "La API es solo para administración: `EsAdministrador` es el permiso global de DRF, así que
+> ventas, cocina, calidad, despacho y cliente reciben 403. El panel interno no usa la API ni
+> `fetch`; todo se valida en el modelo y se renderiza en el servidor. Hay una prueba
+> (`FrontendSeguridadTest`) que falla si un template interno vuelve a usar `/api/`."
+
+## 9. Modelo, verificación y cierre (1 min)
+
+> "El modelo está en 3FN: categorías separadas, BOM en tabla intermedia, precio histórico en el
+> detalle, pagos como registro, historial de estados y movimientos de inventario como auditoría.
+> La app corre en EC2 con PostgreSQL, Gunicorn en socket Unix y Nginx como proxy inverso."
 
 ```powershell
-python smoke_test.py
+python manage.py check
+python manage.py test api      # 43 pruebas
+python smoke_test.py           # no deja datos
 ```
 
-> Mostrar la línea `Transición inválida -> HTTP 400`.
-
-## 5. Descuento de insumos por BOM (2 min)
-
-1. Anotar el stock de **Harina sin polvos** en **Insumos**.
-2. Volver al Kanban y mover un pedido *Recibido* a *En preparación*.
-3. Refrescar **Insumos** → el stock bajó exactamente por la receta × cantidad.
-4. En el detalle del pedido, sección **Insumos** → "ya fueron descontados".
-
-> "El BOM es la tabla intermedia `RecetaInsumo` (producto ↔ insumo ↔ cantidad), igual al
-> ejemplo libro–autor de la unidad de normalización. El descuento ocurre una sola vez por
-> la bandera `insumos_descontados`, dentro de `transaction.atomic` y con `select_for_update`
-> para evitar que dos pedidos simultáneos sobregiren el stock. Si falta stock, se cancela
-> todo y se listan los faltantes."
-
-## 6. Despacho con evidencia (2 min)
-
-1. Ir a **Despachos**.
-2. Crear el despacho de un pedido *Listo* con dirección.
-3. Intentar confirmar sin archivo o sin receptor → error (lo validan `Despacho.clean` y la vista).
-4. Adjuntar una imagen como firma o comprobante, escribir el receptor y confirmar.
-5. Mostrar el estado *Confirmado*, el enlace a la evidencia y el pedido ahora en *Entregado*.
-6. Intentar confirmar de nuevo → el sistema lo rechaza.
-
-> "La entrega no se puede cerrar sin firma ni comprobante, y el pedido no puede pasar a
-> Entregado si no hay un despacho confirmado. La confirmación es atómica: o se guarda la
-> evidencia y cambia el estado, o no se guarda nada."
-
-## 7. Admin y API (1 min)
-
-1. `/admin/` → mostrar cabecera personalizada, filtros, búsqueda e inlines
-   (detalle del pedido e ingredientes del BOM).
-2. `/api/` → mostrar el navegador DRF y `/api/pedidos/`.
-3. Cerrar sesión y abrir `/api/pedidos/` → redirección/401.
-
-> "La API usa ViewSets y DefaultRouter, como pide la receta del ramo. Los catálogos son de
-> solo lectura para usuarios que no son administradores. Los permisos por rol están
-> centralizados en `roles.py` y `permissions.py`: ventas no descuenta insumos, cocina/calidad
-> no crean pedidos ni despachos, y despacho gestiona sus rutas. Si pruebo con otro rol, la API
-> responde 403, no 400."
-
-## 8. Modelo y despliegue (1 min)
-
-> "El modelo está en 3FN: categorías e insumos separados, BOM en tabla intermedia, precio
-> histórico en el detalle, historial de estados y movimientos de inventario como auditoría.
-> La app corre en una instancia EC2 con PostgreSQL, Gunicorn como servicio systemd y Nginx
-> como proxy inverso sirviendo estáticos."
+> "El sistema cubre la venta completa y la operación interna: catálogo, agenda, pago, producción,
+> insumos y entrega con evidencia, con la API cerrada a los roles que no la necesitan."
 
 ## Preguntas probables y respuesta corta
 
 | Pregunta | Respuesta |
 |---|---|
-| ¿Por qué 3FN? | Evita redundancia y anomalías de actualización: la categoría no se repite en cada insumo y la receta vive en `RecetaInsumo`. |
-| ¿Dónde está la lógica de negocio? | En `models.py`: `cambiar_estado`, `descontar_insumos`, `Despacho.clean`. Las vistas solo orquestan. |
-| ¿Cómo evitas descontar dos veces? | Bandera `insumos_descontados` + transacción atómica. |
+| ¿Por qué la API es solo para admin? | El panel HTML cubre la operación; tener permisos por rol en la API duplicaba reglas y ampliaba la superficie de ataque. `EsAdministrador` cierra el resto con 403. |
+| ¿Dónde está la lógica de negocio? | En `models.py`: `cambiar_estado`, `validar_agenda`, `descontar_insumos`, `reponer_insumos`, `Despacho.clean`. Las vistas solo orquestan. |
+| ¿Cómo se calcula el pago? | `total_pagado` suma los `Pago`; `estado_pago` es pendiente, parcial o pagado; `saldo = total − pagado`. Sin pagos no se confirma. |
+| ¿Cómo evitas vender sin stock? | `Producto.unidades_disponibles` sale del BOM y el checkout compara cada línea antes de crear el pedido. |
+| ¿Cómo funciona la agenda? | 48 h para web, 09:00–18:59 de Santiago y cupo de 6 por día; el mostrador no exige anticipación pero sí horario y cupo. |
+| ¿Cómo evitas descontar dos veces? | Bandera `insumos_descontados` + transacción atómica + `select_for_update`. |
 | ¿Qué pasa si no hay stock? | `ValidationError` con los faltantes; la transacción se revierte y el pedido no cambia de estado. |
-| ¿Cómo se protege la API? | `IsAuthenticated` global, permisos por rol en `permissions.py` y CSRF en el JS con `X-CSRFToken`. Un rol incorrecto recibe 403. |
+| ¿Se puede entregar sin evidencia? | No: el despacho exige receptor y firma o comprobante; el retiro exige `retirado_por`. |
+| ¿Por qué el carrito no está en la base? | Se puede comprar sin cuenta; guardarlo en sesión evita tablas y limpieza de carritos abandonados. El precio se lee siempre del catálogo. |
 | ¿Por qué PostgreSQL y no SQLite? | Requisito del ramo; además soporta concurrencia y `select_for_update`, que SQLite no. |
 | ¿Qué pasa si dos usuarios mueven el pedido a la vez? | El flujo se valida contra el estado actual y el descuento bloquea las filas de insumos. |
-| ¿Se puede marcar Entregado sin evidencia? | No: `Pedido.cambiar_estado` exige un `Despacho` confirmado con firma o comprobante. |
-| ¿Se puede editar un pedido después de descontar insumos? | No: el serializer y la vista de borrado lo bloquean con 400. |
 | ¿Cómo se despliega? | EC2 Ubuntu, Postgres local, venv, `migrate`, `collectstatic`, Gunicorn en socket Unix y Nginx. |
-| ¿Qué hace el Admin? | Gestión de todos los modelos con filtros, búsqueda, inlines y una acción masiva para pasar pedidos a *Listo*. |
-| ¿Qué mejorarías? | Notificaciones al cliente, facturación electrónica y tests de carga; hoy están fuera de alcance. |
-
-## Cierre (30 s)
-
-> "El sistema permite trazabilidad completa: desde la cotización, pasando por producción y
-> consumo de insumos, hasta la entrega con evidencia. Todo queda auditado y las reglas se
-> validan en el modelo, por lo que la interfaz web y la API se comportan igual."
+| ¿Qué mejorarías? | Impedir pagos que superen el saldo, notificaciones automáticas, facturación electrónica y tests de carga. |

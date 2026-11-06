@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Mis pedidos{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Mi cuenta</p>
+        <h1>Mis pedidos</h1>
+        <p class="lede">Revisa el estado de cada pedido y su avance en producción.</p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-ghost" href="{% url 'seguimiento' %}">Seguir por código</a>
+        <a class="btn btn-solid" href="{% url 'tienda' %}">Hacer un pedido</a>
+    </div>
+</section>
+
+{% if pedidos %}
+<section class="order-grid">
+    {% for pedido in pedidos %}
+    <article class="order-card">
+        <div class="order-card-head">
+            <div>
+                <p class="panel-role">{{ pedido.fecha_pedido|date:"d/m/Y" }}</p>
+                <h2>{{ pedido.codigo }}</h2>
+            </div>
+            <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+        </div>
+        <dl class="detail-list">
+            <div><dt>Entrega</dt><dd>{{ pedido.fecha_entrega|date:"d/m/Y H:i" }}</dd></div>
+            <div><dt>Modalidad</dt><dd>{{ pedido.get_modalidad_display }}</dd></div>
+            <div><dt>Total</dt><dd>${{ pedido.total|floatformat:0 }}</dd></div>
+            <div><dt>Pago</dt><dd>{{ pedido.estado_pago_display }}</dd></div>
+        </dl>
+        <div class="order-card-actions">
+            <a class="link" href="{% url 'pedido_detalle' pedido.pk %}">Ver detalle</a>
+            <a class="link" href="{% url 'seguimiento_detalle' pedido.token_seguimiento %}">Seguimiento público</a>
+        </div>
+    </article>
+    {% endfor %}
+</section>
+{% else %}
+<section class="panel empty-cart">
+    <h2>Todavía no tienes pedidos</h2>
+    <p class="muted">Cuando hagas tu primera compra aparecerá aquí con su seguimiento.</p>
+    <a class="btn btn-solid mt" href="{% url 'tienda' %}">Ver el catálogo</a>
+</section>
+{% endif %}
+{% endblock %}

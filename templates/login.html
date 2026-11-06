@@ -5,15 +5,15 @@
 {% block content %}
 <section class="login-wrap">
     <div class="login-aside">
-        <p class="hero-role">Sistema de gestión</p>
-        <h1>El taller,<br>en orden.</h1>
-        <p>Pedidos, cocina, insumos y despacho en un solo lugar. Cada rol ve
-        únicamente lo que necesita para su turno.</p>
+        <p class="hero-role">Dulce Arte</p>
+        <h1>Tu pedido,<br>en orden.</h1>
+        <p>Compra en la tienda o entra al panel interno según tu rol. Cada
+        persona ve únicamente lo que necesita.</p>
         <ul class="login-list">
-            <li>Ventas cotiza y registra.</li>
-            <li>Cocina mueve el tablero y consume insumos.</li>
-            <li>Calidad aprueba antes del despacho.</li>
-            <li>Despacho confirma la entrega con evidencia.</li>
+            <li>Clientes: historial, seguimiento y datos de entrega.</li>
+            <li>Ventas: pedidos, pagos y confirmación.</li>
+            <li>Cocina y calidad: tablero de producción e insumos.</li>
+            <li>Despacho: rutas, retiros y evidencia de entrega.</li>
         </ul>
     </div>
 
@@ -29,10 +29,12 @@
             <label>Contraseña
                 <input type="password" name="password" autocomplete="current-password" required>
             </label>
-            <button class="btn btn-solid btn-block" type="submit">Entrar al panel</button>
+            <button class="btn btn-solid btn-block" type="submit">Entrar</button>
         </form>
 
-        <p class="muted small">¿Problemas para entrar? Contacta al administrador.</p>
+        <p class="muted small">¿Eres cliente y aún no tienes cuenta?
+            <a href="{% url 'registro' %}">Regístrate aquí</a>.
+        </p>
     </div>
 </section>
 {% endblock %}

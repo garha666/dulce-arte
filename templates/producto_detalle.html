@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}{{ producto.nombre }}{% endblock %}
+
+{% block content %}
+<p class="breadcrumb"><a href="{% url 'tienda' %}">← Volver al catálogo</a></p>
+
+<section class="product-detail">
+    <div class="product-detail-media">
+        {% if producto.imagen %}
+            <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}">
+        {% else %}
+            <span class="product-media-placeholder large">{{ producto.nombre|first }}</span>
+        {% endif %}
+    </div>
+
+    <div class="product-detail-info">
+        {% if producto.categoria %}<p class="panel-role">{{ producto.categoria.nombre }}</p>{% endif %}
+        <h1>{{ producto.nombre }}</h1>
+        <p class="product-price large">${{ producto.precio_base|floatformat:0 }}</p>
+        <p class="lede">{{ producto.descripcion|default:"Preparado a pedido con ingredientes frescos." }}</p>
+
+        <ul class="product-facts">
+            <li><strong>{{ producto.porciones }}</strong> porciones</li>
+            <li>
+                {% if producto.unidades_disponibles is None %}
+                    <span class="badge badge-ok">Disponible</span>
+                {% elif producto.disponible %}
+                    <span class="badge badge-ok">{{ producto.unidades_disponibles }} disponibles</span>
+                {% else %}
+                    <span class="badge badge-danger">Sin stock</span>
+                {% endif %}
+            </li>
+            <li>48 h de anticipación</li>
+        </ul>
+
+        {% if producto.disponible %}
+        <form method="post" action="{% url 'carrito_agregar' producto.pk %}" class="form mt">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'carrito' %}">
+            <div class="form-row">
+                <label>Cantidad
+                    <input type="number" name="cantidad" min="1" max="50" value="1" required>
+                </label>
+                <label>Fecha estimada de entrega
+                    <input type="text" value="Desde 48 h" disabled>
+                </label>
+            </div>
+            <label>Personalización (opcional)
+                <textarea name="personalizacion" rows="3"
+                          placeholder="Dedicatoria, colores, temática, restricciones alimentarias…"></textarea>
+            </label>
+            <button class="btn btn-solid btn-lg" type="submit">Agregar al carrito</button>
+        </form>
+        {% else %}
+        <div class="panel mt">
+            <p class="muted">Este producto no tiene stock suficiente para una nueva unidad hoy.</p>
+            <a class="link" href="{% url 'contacto' %}">Consúltanos por una alternativa</a>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="panel mt">
+    <h2>Receta e ingredientes</h2>
+    <p class="muted">Cada producto descuenta sus insumos del inventario al entrar en preparación.</p>
+    <ul class="recipe-list">
+        {% for ingrediente in producto.ingredientes.all %}
+            <li>{{ ingrediente.insumo.nombre }} <span class="muted">{{ ingrediente.cantidad }} {{ ingrediente.insumo.get_unidad_display }}</span></li>
+        {% empty %}
+            <li class="muted">Receta en definición.</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

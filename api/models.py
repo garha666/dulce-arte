@@ -9,6 +9,8 @@ Diseño en Tercera Forma Normal (3FN):
          (equivalente al ejemplo libro-autor-editorial de la unidad de BD).
 """
 
+import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.models import User
@@ -29,12 +31,13 @@ class Perfil(models.Model):
         ("cocina", "Cocina"),
         ("calidad", "Control de calidad"),
         ("despacho", "Despacho"),
+        ("cliente", "Cliente"),
     ]
 
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="perfil"
     )
-    rol = models.CharField(max_length=20, choices=ROLES, default="ventas")
+    rol = models.CharField(max_length=20, choices=ROLES, default="cliente")
     telefono = models.CharField(max_length=20, blank=True)
 
     class Meta:
@@ -106,6 +109,21 @@ class Insumo(models.Model):
 # --------------------------------------------------------------------------- #
 #  Productos (recetas) y Lista de Materiales (BOM)
 # --------------------------------------------------------------------------- #
+class CategoriaProducto(models.Model):
+    """Categoría comercial del catálogo (tortas, postres, mesas dulces…)."""
+
+    nombre = models.CharField(max_length=60, unique=True)
+    descripcion = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        verbose_name = "Categoría de producto"
+        verbose_name_plural = "Categorías de producto"
+        ordering = ["nombre"]
+
+    def __str__(self):
+        return self.nombre
+
+
 class Producto(models.Model):
     nombre = models.CharField(max_length=100, unique=True)
     descripcion = models.TextField(blank=True)
@@ -113,6 +131,13 @@ class Producto(models.Model):
     porciones = models.PositiveSmallIntegerField(default=1)
     activo = models.BooleanField(default=True)
     imagen = models.ImageField(upload_to="productos/", blank=True, null=True)
+    categoria = models.ForeignKey(
+        CategoriaProducto,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="productos",
+    )
 
     class Meta:
         verbose_name = "Producto"
@@ -121,6 +146,27 @@ class Producto(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    @property
+    def unidades_disponibles(self):
+        """Unidades que se pueden producir con el stock actual (None = sin receta)."""
+        ingredientes = [i for i in self.ingredientes.all() if i.cantidad]
+        if not ingredientes:
+            return None
+        return max(
+            int(
+                min(
+                    ingrediente.insumo.stock_actual / ingrediente.cantidad
+                    for ingrediente in ingredientes
+                )
+            ),
+            0,
+        )
+
+    @property
+    def disponible(self):
+        disponibles = self.unidades_disponibles
+        return disponibles is None or disponibles > 0
 
     @property
     def costo_estimado(self):
@@ -160,6 +206,19 @@ class RecetaInsumo(models.Model):
 #  Clientes
 # --------------------------------------------------------------------------- #
 class Cliente(models.Model):
+    """Ficha comercial del cliente.
+
+    Un cliente puede existir sin cuenta (venta de mostrador) o estar vinculado
+    a un usuario del sitio para comprar y seguir sus pedidos.
+    """
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cliente",
+    )
     nombre = models.CharField(max_length=120)
     telefono = models.CharField(max_length=20)
     email = models.EmailField(blank=True)
@@ -174,6 +233,10 @@ class Cliente(models.Model):
     def __str__(self):
         return f"{self.nombre} ({self.telefono})"
 
+    @property
+    def tiene_cuenta(self):
+        return self.user_id is not None
+
 
 # --------------------------------------------------------------------------- #
 #  Pedidos (cotización + tablero Kanban)
@@ -181,6 +244,7 @@ class Cliente(models.Model):
 class Pedido(models.Model):
     ESTADOS = [
         ("recibido", "Recibido"),
+        ("confirmado", "Confirmado"),
         ("preparacion", "En preparación"),
         ("horneado", "Horneado / Decorado"),
         ("calidad", "Control de calidad"),
@@ -190,25 +254,51 @@ class Pedido(models.Model):
         ("cancelado", "Cancelado"),
     ]
 
-    # Flujo permitido del tablero Kanban
+    # Flujo permitido. Producción no arranca hasta que ventas/admin confirma.
     TRANSICIONES = {
-        "recibido": ["preparacion", "cancelado"],
+        "recibido": ["confirmado", "cancelado"],
+        "confirmado": ["preparacion", "cancelado"],
         "preparacion": ["horneado", "cancelado"],
         "horneado": ["calidad", "cancelado"],
         "calidad": ["listo", "preparacion"],
-        "listo": ["despachado", "entregado"],
+        "listo": ["despachado", "entregado", "cancelado"],
         "despachado": ["entregado"],
         "entregado": [],
         "cancelado": [],
     }
 
+    CANALES = [
+        ("web", "Tienda en línea"),
+        ("mostrador", "Mostrador"),
+        ("telefono", "Teléfono"),
+    ]
+
+    MODALIDADES = [
+        ("retiro", "Retiro en tienda"),
+        ("despacho", "Despacho a domicilio"),
+    ]
+
+    # Reglas comerciales (una pastelería artesanal no produce al instante).
+    LEAD_TIME_HORAS = 48
+    CUPO_DIARIO = 6
+    HORARIO_ATENCION = (9, 19)  # 09:00 a 18:59, hora de Santiago
+
     codigo = models.CharField(max_length=20, unique=True, blank=True)
+    token_seguimiento = models.CharField(
+        max_length=24, unique=True, blank=True, null=True
+    )
     cliente = models.ForeignKey(
         Cliente, on_delete=models.PROTECT, related_name="pedidos"
+    )
+    canal = models.CharField(max_length=20, choices=CANALES, default="mostrador")
+    modalidad = models.CharField(
+        max_length=20, choices=MODALIDADES, default="retiro"
     )
     estado = models.CharField(max_length=20, choices=ESTADOS, default="recibido")
     fecha_pedido = models.DateTimeField(auto_now_add=True)
     fecha_entrega = models.DateTimeField()
+    direccion_entrega = models.CharField(max_length=200, blank=True)
+    telefono_contacto = models.CharField(max_length=20, blank=True)
     descripcion_diseno = models.TextField(
         blank=True, help_text="Ingredientes, diseño, colores, temática, etc."
     )
@@ -220,7 +310,16 @@ class Pedido(models.Model):
         max_digits=10, decimal_places=2, default=Decimal("0")
     )
     observaciones = models.TextField(blank=True)
+    retirado_por = models.CharField(max_length=120, blank=True)
     insumos_descontados = models.BooleanField(default=False)
+    confirmado_en = models.DateTimeField(null=True, blank=True)
+    confirmado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pedidos_confirmados",
+    )
     creado_por = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -240,9 +339,70 @@ class Pedido(models.Model):
 
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        pendientes = []
         if not self.codigo:
             self.codigo = f"PED-{self.pk:05d}"
-            super().save(update_fields=["codigo"])
+            pendientes.append("codigo")
+        if not self.token_seguimiento:
+            token = uuid.uuid4().hex[:12]
+            while Pedido.objects.filter(token_seguimiento=token).exists():
+                token = uuid.uuid4().hex[:12]
+            self.token_seguimiento = token
+            pendientes.append("token_seguimiento")
+        if pendientes:
+            super().save(update_fields=pendientes)
+
+    def clean(self):
+        """Valida la agenda: anticipación, horario de atención y cupo diario."""
+        super().clean()
+        if not self.fecha_entrega:
+            return
+
+        if self.modalidad == "despacho" and not (self.direccion_entrega or "").strip():
+            raise ValidationError(
+                {"direccion_entrega": "Un pedido con despacho necesita dirección."}
+            )
+
+        self.validar_agenda(
+            self.fecha_entrega,
+            exigir_anticipacion=self.canal == "web",
+            excluir_pk=self.pk,
+        )
+
+    @classmethod
+    def validar_agenda(cls, fecha_entrega, *, exigir_anticipacion=True, excluir_pk=None):
+        """Reglas de agenda compartidas por la tienda y el panel interno."""
+        local = timezone.localtime(fecha_entrega)
+
+        if exigir_anticipacion:
+            minimo = timezone.localtime() + timedelta(hours=cls.LEAD_TIME_HORAS)
+            if local < minimo:
+                raise ValidationError(
+                    "Los pedidos en línea necesitan al menos "
+                    f"{cls.LEAD_TIME_HORAS} horas de anticipación."
+                )
+
+        apertura, cierre = cls.HORARIO_ATENCION
+        if not (apertura <= local.hour < cierre):
+            raise ValidationError(
+                f"La entrega debe agendarse entre {apertura:02d}:00 y "
+                f"{cierre:02d}:00 (hora de Santiago)."
+            )
+
+        agendados = cls.objects.filter(
+            fecha_entrega__gte=local.replace(hour=0, minute=0, second=0, microsecond=0),
+            fecha_entrega__lt=local.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            + timedelta(days=1),
+        ).exclude(estado="cancelado")
+        if excluir_pk:
+            agendados = agendados.exclude(pk=excluir_pk)
+        if agendados.count() >= cls.CUPO_DIARIO:
+            raise ValidationError(
+                f"El {local:%d/%m} ya alcanzó el cupo de {cls.CUPO_DIARIO} pedidos. "
+                "Elige otra fecha."
+            )
 
     # --------------------------------------------------------- cotización
     @property
@@ -254,8 +414,33 @@ class Pedido(models.Model):
         return self.subtotal_productos + self.costo_despacho
 
     @property
+    def total_pagado(self):
+        """Suma de pagos registrados; usa el anticipo histórico si no hay pagos."""
+        pagos = self.pagos.all()
+        if pagos:
+            return sum((p.monto for p in pagos), Decimal("0"))
+        return self.anticipo
+
+    @property
     def saldo(self):
-        return self.total - self.anticipo
+        return self.total - self.total_pagado
+
+    @property
+    def estado_pago(self):
+        pagado = self.total_pagado
+        if pagado <= 0:
+            return "pendiente"
+        if pagado >= self.total:
+            return "pagado"
+        return "parcial"
+
+    @property
+    def estado_pago_display(self):
+        return {
+            "pendiente": "Pago pendiente",
+            "parcial": "Abono parcial",
+            "pagado": "Pagado",
+        }[self.estado_pago]
 
     # ------------------------------------------------------------- kanban
     def transiciones_disponibles(self):
@@ -309,8 +494,31 @@ class Pedido(models.Model):
         self.save(update_fields=["insumos_descontados"])
 
     @transaction.atomic
+    def reponer_insumos(self, usuario=None):
+        """Devuelve al inventario lo consumido si el pedido se cancela."""
+        if not self.insumos_descontados:
+            return
+
+        consumos = self.movimientos.filter(tipo="consumo").select_related("insumo")
+        for consumo in consumos:
+            insumo = Insumo.objects.select_for_update().get(pk=consumo.insumo_id)
+            insumo.stock_actual += consumo.cantidad
+            insumo.save(update_fields=["stock_actual"])
+            MovimientoInsumo.objects.create(
+                insumo=insumo,
+                tipo="entrada",
+                cantidad=consumo.cantidad,
+                pedido=self,
+                usuario=usuario,
+                observacion=f"Reposición por cancelación del pedido {self.codigo}",
+            )
+
+        self.insumos_descontados = False
+        self.save(update_fields=["insumos_descontados"])
+
+    @transaction.atomic
     def cambiar_estado(self, nuevo_estado, usuario=None, comentario=""):
-        """Mueve el pedido en el tablero Kanban validando el flujo."""
+        """Mueve el pedido por el flujo validando reglas de negocio."""
         if nuevo_estado == self.estado:
             raise ValidationError("El pedido ya se encuentra en ese estado.")
 
@@ -320,20 +528,52 @@ class Pedido(models.Model):
                 f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}."
             )
 
-        if nuevo_estado == "entregado":
-            despacho = Despacho.objects.filter(pedido=self).first()
-            if not despacho or not despacho.confirmado:
+        if nuevo_estado == "confirmado":
+            if self.estado_pago == "pendiente":
                 raise ValidationError(
-                    "Para marcar el pedido como entregado debes confirmar un "
-                    "despacho con firma o comprobante."
+                    "Confirma el pago del anticipo antes de pasar el pedido a "
+                    "producción."
+                )
+
+        if nuevo_estado == "despachado" and self.modalidad != "despacho":
+            raise ValidationError(
+                "Solo un pedido con despacho a domicilio puede salir a reparto."
+            )
+
+        if nuevo_estado in {"despachado", "entregado"}:
+            despacho = Despacho.objects.filter(pedido=self).first()
+            if self.modalidad == "despacho":
+                if not despacho:
+                    raise ValidationError(
+                        "Asigna un despacho antes de mover el pedido a reparto."
+                    )
+                if nuevo_estado == "despachado" and not despacho.fecha_salida:
+                    despacho.fecha_salida = timezone.now()
+                    despacho.save(update_fields=["fecha_salida"])
+                if nuevo_estado == "entregado" and not despacho.confirmado:
+                    raise ValidationError(
+                        "Para marcar el pedido como entregado debes confirmar un "
+                        "despacho con firma o comprobante."
+                    )
+            elif nuevo_estado == "entregado" and not (self.retirado_por or "").strip():
+                raise ValidationError(
+                    "Registra quién retira el pedido antes de cerrarlo."
                 )
 
         if nuevo_estado == "preparacion":
             self.descontar_insumos(usuario)
 
+        if nuevo_estado == "cancelado":
+            self.reponer_insumos(usuario)
+
         estado_anterior = self.estado
+        campos = ["estado", "actualizado"]
         self.estado = nuevo_estado
-        self.save(update_fields=["estado", "actualizado"])
+        if nuevo_estado == "confirmado":
+            self.confirmado_en = timezone.now()
+            self.confirmado_por = usuario
+            campos += ["confirmado_en", "confirmado_por"]
+        self.save(update_fields=campos)
 
         HistorialEstado.objects.create(
             pedido=self,
@@ -436,6 +676,48 @@ class MovimientoInsumo(models.Model):
 
 
 # --------------------------------------------------------------------------- #
+#  Pagos (registro manual: efectivo, transferencia, tarjeta)
+# --------------------------------------------------------------------------- #
+class Pago(models.Model):
+    """Abono real recibido. El estado de pago del pedido se calcula desde aquí."""
+
+    METODOS = [
+        ("efectivo", "Efectivo"),
+        ("transferencia", "Transferencia bancaria"),
+        ("tarjeta", "Tarjeta débito/crédito"),
+    ]
+    TIPOS = [
+        ("anticipo", "Anticipo"),
+        ("saldo", "Saldo final"),
+        ("completo", "Pago completo"),
+    ]
+
+    pedido = models.ForeignKey(Pedido, on_delete=models.CASCADE, related_name="pagos")
+    monto = models.DecimalField(max_digits=10, decimal_places=2)
+    metodo = models.CharField(max_length=20, choices=METODOS, default="transferencia")
+    tipo = models.CharField(max_length=20, choices=TIPOS, default="anticipo")
+    referencia = models.CharField(
+        max_length=100, blank=True, help_text="N° de transferencia o voucher."
+    )
+    registrado_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="pagos"
+    )
+    fecha = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "Pago"
+        verbose_name_plural = "Pagos"
+        ordering = ["-fecha"]
+
+    def __str__(self):
+        return f"{self.pedido.codigo} · ${self.monto} · {self.get_metodo_display()}"
+
+    def clean(self):
+        if self.monto is not None and self.monto <= 0:
+            raise ValidationError({"monto": "El monto debe ser mayor que cero."})
+
+
+# --------------------------------------------------------------------------- #
 #  Despacho y confirmación de entrega
 # --------------------------------------------------------------------------- #
 class Despacho(models.Model):
@@ -449,6 +731,13 @@ class Despacho(models.Model):
     fecha_salida = models.DateTimeField(null=True, blank=True)
     fecha_entrega = models.DateTimeField(null=True, blank=True)
     receptor_nombre = models.CharField(max_length=120, blank=True)
+    confirmado_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="despachos_confirmados",
+    )
     firma = models.ImageField(upload_to="firmas/", blank=True, null=True)
     comprobante = models.ImageField(upload_to="comprobantes/", blank=True, null=True)
     observaciones = models.TextField(blank=True)

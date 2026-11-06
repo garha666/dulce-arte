@@ -1,92 +1,131 @@
 {% extends "base.html" %}
-{% load static %}
 {% block title %}Pedidos{% endblock %}
 
 {% block content %}
 <section class="panel-head">
     <div>
         <p class="panel-role">Pedidos y cotizaciones</p>
-        <h1>{% if puede_crear %}Registrar un pedido{% else %}Pedidos en curso{% endif %}</h1>
+        <h1>Pedidos</h1>
         <p class="lede">
             {% if puede_crear %}
-                Cliente, producto, fecha y diseño quedan registrados con su total.
+                Registra pedidos de mostrador y revisa los que llegan desde la tienda.
             {% else %}
-                Consulta el avance de los pedidos. Registrar y editar corresponde a ventas.
+                Consulta el avance de los pedidos. Registrar corresponde a ventas.
             {% endif %}
         </p>
     </div>
 </section>
 
-<section class="{% if puede_crear %}grid-2{% endif %}">
-    {% if puede_crear %}
-    <div class="panel">
-        <div class="panel-title">
-            <h2>Nuevo pedido</h2>
-        </div>
-        <form id="form-pedido" class="form">
-            <label>Cliente
-                <select name="cliente" required>
-                    <option value="">Seleccione…</option>
-                    {% for cliente in clientes %}
-                        <option value="{{ cliente.pk }}">{{ cliente.nombre }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-
-            <label>Fecha y hora de entrega
-                <input type="datetime-local" name="fecha_entrega" required>
-            </label>
-
-            <label>Producto
-                <select name="producto" required>
-                    <option value="">Seleccione…</option>
-                    {% for producto in productos %}
-                        <option value="{{ producto.pk }}" data-precio="{{ producto.precio_base }}">
-                            {{ producto.nombre }} · ${{ producto.precio_base|floatformat:"0g" }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </label>
-
-            <label>Cantidad
-                <input type="number" name="cantidad" min="1" value="1" required>
-            </label>
-
-            <label>Diseño y personalización
-                <textarea name="descripcion_diseno" rows="3" placeholder="Temática, colores, ingredientes, dedicatoria…"></textarea>
-            </label>
-
-            <div class="form-row">
-                <label>Anticipo
-                    <input type="number" name="anticipo" min="0" step="100" value="0">
-                </label>
-                <label>Costo de despacho
-                    <input type="number" name="costo_despacho" min="0" step="100" value="0">
-                </label>
-            </div>
-
-            <button class="btn btn-solid" type="submit">Registrar pedido</button>
-            <p id="form-msg" class="form-msg" role="status"></p>
-        </form>
-    </div>
-    {% endif %}
-
-    <div class="panel">
-        <div class="panel-title">
-            <h2>Pedidos registrados</h2>
-        </div>
-        <table class="table" id="tabla-pedidos">
-            <thead>
-                <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Estado</th><th>Total</th></tr>
-            </thead>
-            <tbody>
-                <tr><td colspan="5" class="empty">Cargando…</td></tr>
-            </tbody>
-        </table>
-    </div>
+<section class="panel">
+    <form method="get" class="form-inline">
+        <label class="grow">Buscar
+            <input type="search" name="q" value="{{ busqueda }}" placeholder="Código, cliente o teléfono">
+        </label>
+        <label>Estado
+            <select name="estado">
+                <option value="">Todos</option>
+                {% for clave, etiqueta in estados %}
+                    <option value="{{ clave }}" {% if estado_actual == clave %}selected{% endif %}>{{ etiqueta }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button class="btn btn-ghost" type="submit">Filtrar</button>
+        <a class="btn btn-ghost" href="{% url 'pedidos' %}">Limpiar</a>
+    </form>
 </section>
-{% endblock %}
 
-{% block scripts %}
-<script src="{% static 'js/pedidos.js' %}"></script>
+{% if puede_crear %}
+<details class="panel mt">
+    <summary class="panel-summary">
+        <h2>Registrar un pedido de mostrador</h2>
+    </summary>
+    <form method="post" action="{% url 'pedido_crear' %}" class="form mt">
+        {% csrf_token %}
+        <div class="form-row">
+            <label>Cliente
+                {{ form.cliente }}
+                {% if form.cliente.errors %}<span class="field-error">{{ form.cliente.errors|striptags }}</span>{% endif %}
+            </label>
+            <label>Canal
+                {{ form.canal }}
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label>Producto
+                {{ form.producto }}
+            </label>
+            <label>Cantidad
+                {{ form.cantidad }}
+            </label>
+        </div>
+
+        <label>Personalización
+            {{ form.personalizacion }}
+        </label>
+
+        <div class="form-row">
+            <label>Fecha y hora de entrega
+                {{ form.fecha_entrega }}
+                {% if form.fecha_entrega.errors %}<span class="field-error">{{ form.fecha_entrega.errors|striptags }}</span>{% endif %}
+            </label>
+            <label>Modalidad
+                {{ form.modalidad }}
+            </label>
+        </div>
+
+        <div class="form-row">
+            <label>Dirección de despacho
+                {{ form.direccion_entrega }}
+            </label>
+            <label>Teléfono de contacto
+                {{ form.telefono_contacto }}
+            </label>
+        </div>
+
+        <label>Diseño y personalización del pedido
+            {{ form.descripcion_diseno }}
+        </label>
+
+        <div class="form-row">
+            <label>Costo de despacho
+                {{ form.costo_despacho }}
+            </label>
+            <label>Observaciones
+                {{ form.observaciones }}
+            </label>
+        </div>
+
+        <button class="btn btn-solid" type="submit">Registrar pedido</button>
+        <p class="muted small">Los pedidos de mostrador pueden agendarse sin el plazo de 48 h, respetando cupo y horario.</p>
+    </form>
+</details>
+{% endif %}
+
+<section class="panel mt">
+    <div class="panel-title">
+        <h2>Listado</h2>
+        <span class="muted small">{{ pedidos|length }} pedido{{ pedidos|length|pluralize }}</span>
+    </div>
+    <table class="table" id="tabla-pedidos">
+        <thead>
+            <tr><th>Código</th><th>Cliente</th><th>Entrega</th><th>Modalidad</th><th>Estado</th><th>Pago</th><th>Total</th></tr>
+        </thead>
+        <tbody>
+            {% for pedido in pedidos %}
+            <tr>
+                <td><a class="link" href="{% url 'pedido_detalle' pedido.pk %}">{{ pedido.codigo }}</a></td>
+                <td>{{ pedido.cliente.nombre }}</td>
+                <td>{{ pedido.fecha_entrega|date:"d/m H:i" }}</td>
+                <td>{{ pedido.get_modalidad_display }}</td>
+                <td><span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span></td>
+                <td>{{ pedido.estado_pago_display }}</td>
+                <td>${{ pedido.total|floatformat:0 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="7" class="empty">No hay pedidos con esos filtros.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
 {% endblock %}

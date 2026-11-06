@@ -4,9 +4,12 @@
 {% block content %}
 <section class="page-head">
     <div>
-        <p class="panel-role">Catálogo</p>
-        <h1>Servicios</h1>
-        <p class="lede">Tortas personalizadas, mesas dulces y postres para eventos.</p>
+        <p class="panel-role">Servicios</p>
+        <h1>Qué horneamos</h1>
+        <p class="lede">Tortas personalizadas, mesas dulces y postres para eventos, con entrega agendada.</p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-solid" href="{% url 'tienda' %}">Ver catálogo y precios</a>
     </div>
 </section>
 
@@ -20,18 +23,37 @@
         <p class="muted">Producción por etapas con control de calidad antes del despacho.</p>
     </article>
     <article class="card">
-        <span class="card-label">Despacho programado</span>
-        <p class="muted">Ruta asignada y entrega confirmada con firma digital.</p>
+        <span class="card-label">Retiro y despacho</span>
+        <p class="muted">Retiras en tienda o recibes en domicilio con confirmación de entrega.</p>
     </article>
 </section>
 
-<section class="panel mt">
-    <h2>Accesos del sistema</h2>
-    <p class="muted">Estos botones llevan a los servicios del backend desplegado.</p>
-    <div class="botones">
-        <a class="btn btn-solid" href="/api/" target="_blank">API REST (DRF)</a>
-        <a class="btn btn-ghost" href="/admin/" target="_blank">Panel de administración</a>
-        <a class="btn btn-ghost" href="{% url 'contacto' %}">Cotizar un pedido</a>
+{% if productos %}
+<section class="section">
+    <div class="section-head">
+        <h2>Algunos productos</h2>
+        <a class="link" href="{% url 'tienda' %}">Ver todo</a>
     </div>
+    <div class="product-grid">
+        {% for producto in productos %}
+        <article class="product">
+            <div class="product-head">
+                <h3>{{ producto.nombre }}</h3>
+                <span class="product-price">${{ producto.precio_base|floatformat:0 }}</span>
+            </div>
+            <p>{{ producto.descripcion|default:"Preparado a pedido con ingredientes frescos."|truncatechars:100 }}</p>
+            <a class="link" href="{% url 'producto_detalle' producto.pk %}">Ver y pedir</a>
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section class="cta-band">
+    <div>
+        <h2>Pedidos con 48 horas de anticipación</h2>
+        <p>Reserva tu cupo en línea y coordina el abono del anticipo.</p>
+    </div>
+    <a class="btn btn-solid btn-lg" href="{% url 'tienda' %}">Empezar mi pedido</a>
 </section>
 {% endblock %}

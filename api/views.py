@@ -1,70 +1,84 @@
-"""Vistas de Dulce Arte: API (DRF) + páginas HTML con templates."""
+"""Vistas de Dulce Arte.
+
+Tres capas bien separadas:
+
+1. **Tienda pública**: catálogo, carrito en sesión, checkout, seguimiento y
+   cuenta del cliente. No usa la API.
+2. **Panel interno**: pedidos, Kanban, inventario y despachos con formularios
+   Django server-side. No usa la API.
+3. **API REST (DRF)**: reservada al rol administrador para integraciones.
+"""
 
 from functools import wraps
+from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import F
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from . import carrito
+from .forms import (
+    CheckoutForm,
+    ConfirmarEntregaForm,
+    DespachoForm,
+    EstadoForm,
+    PagoForm,
+    PedidoInternoForm,
+    RegistroClienteForm,
+    SeguimientoForm,
+)
 from .models import (
+    CategoriaProducto,
     Cliente,
     Despacho,
     Insumo,
     MensajeContacto,
     MovimientoInsumo,
+    Pago,
     Pedido,
+    PedidoDetalle,
+    Perfil,
     Producto,
 )
-from .permissions import (
-    PuedeGestionarDespacho,
-    PuedeGestionarPedidos,
-    PuedeGestionarProduccion,
-    SoloLecturaOSoloAdministrador,
-)
-from .roles import puede, rol_de
+from .permissions import EsAdministrador
+from .roles import ROLES_INTERNOS, puede, rol_de
 from .serializers import (
     ClienteSerializer,
     DespachoSerializer,
     InsumoSerializer,
     MensajeContactoSerializer,
     MovimientoInsumoSerializer,
+    PagoSerializer,
     PedidoSerializer,
     ProductoSerializer,
 )
 
+COSTO_DESPACHO = Decimal("3500")
+
 # =========================================================================== #
-#  API REST
+#  API REST — solo administración
 # =========================================================================== #
 
 
 class PedidoViewSet(viewsets.ModelViewSet):
-    """CRUD de pedidos + acciones del tablero Kanban."""
+    """CRUD de pedidos + acciones del tablero, solo para administración."""
 
     queryset = Pedido.objects.select_related("cliente").prefetch_related(
-        "detalles__producto", "historial"
+        "detalles__producto", "historial", "pagos"
     )
     serializer_class = PedidoSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_permissions(self):
-        """Aplica el rol correcto según la acción solicitada."""
-        if self.action in ("list", "retrieve"):
-            return [IsAuthenticated()]
-        if self.action in ("create", "update", "partial_update", "destroy"):
-            return [IsAuthenticated(), PuedeGestionarPedidos()]
-        if self.action in ("cambiar_estado", "descontar_insumos"):
-            return [IsAuthenticated(), PuedeGestionarProduccion()]
-        return [IsAuthenticated()]
+    permission_classes = [EsAdministrador]
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -93,7 +107,6 @@ class PedidoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def cambiar_estado(self, request, pk=None):
-        """Mueve el pedido en el Kanban validando el flujo y descontando BOM."""
         pedido = self.get_object()
         nuevo_estado = request.data.get("estado")
         comentario = request.data.get("comentario", "")
@@ -109,7 +122,6 @@ class PedidoViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def descontar_insumos(self, request, pk=None):
-        """Fuerza el descuento de insumos (si aún no se ha hecho)."""
         pedido = self.get_object()
         try:
             pedido.descontar_insumos(usuario=request.user)
@@ -123,21 +135,23 @@ class PedidoViewSet(viewsets.ModelViewSet):
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all().order_by("nombre")
     serializer_class = ClienteSerializer
-    permission_classes = [IsAuthenticated, SoloLecturaOSoloAdministrador]
+    permission_classes = [EsAdministrador]
     search_fields = ("nombre", "telefono", "email")
 
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    queryset = Producto.objects.prefetch_related("ingredientes__insumo")
+    queryset = Producto.objects.select_related("categoria").prefetch_related(
+        "ingredientes__insumo"
+    )
     serializer_class = ProductoSerializer
-    permission_classes = [IsAuthenticated, SoloLecturaOSoloAdministrador]
+    permission_classes = [EsAdministrador]
     search_fields = ("nombre", "descripcion")
 
 
 class InsumoViewSet(viewsets.ModelViewSet):
     queryset = Insumo.objects.select_related("categoria")
     serializer_class = InsumoSerializer
-    permission_classes = [IsAuthenticated, SoloLecturaOSoloAdministrador]
+    permission_classes = [EsAdministrador]
     search_fields = ("nombre",)
     filterset_fields = ("categoria", "unidad", "perecible")
 
@@ -145,17 +159,10 @@ class InsumoViewSet(viewsets.ModelViewSet):
 class DespachoViewSet(viewsets.ModelViewSet):
     queryset = Despacho.objects.select_related("pedido", "repartidor")
     serializer_class = DespachoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdministrador]
     search_fields = ("pedido__codigo", "direccion", "receptor_nombre")
 
-    def get_permissions(self):
-        """Lectura autenticada; escritura solo para despacho y administración."""
-        if self.action in ("list", "retrieve"):
-            return [IsAuthenticated()]
-        return [IsAuthenticated(), PuedeGestionarDespacho()]
-
     def destroy(self, request, *args, **kwargs):
-        """La evidencia de una entrega confirmada no se puede borrar."""
         despacho = self.get_object()
         if despacho.confirmado:
             return Response(
@@ -165,17 +172,24 @@ class DespachoViewSet(viewsets.ModelViewSet):
         return super().destroy(request, *args, **kwargs)
 
 
+class PagoViewSet(viewsets.ModelViewSet):
+    queryset = Pago.objects.select_related("pedido", "registrado_por")
+    serializer_class = PagoSerializer
+    permission_classes = [EsAdministrador]
+    filterset_fields = ("pedido", "metodo", "tipo")
+
+
 class MovimientoInsumoViewSet(viewsets.ReadOnlyModelViewSet):
     """Solo lectura: los movimientos son evidencia de auditoría del BOM."""
 
     queryset = MovimientoInsumo.objects.select_related("insumo", "pedido")
     serializer_class = MovimientoInsumoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdministrador]
     filterset_fields = ("tipo", "insumo", "pedido")
 
 
 # =========================================================================== #
-#  Páginas HTML (templates)
+#  Utilidades de rol y de cliente
 # =========================================================================== #
 
 
@@ -196,6 +210,350 @@ def rol_requerido(*roles):
     return decorador
 
 
+def cliente_de(user):
+    """Ficha de cliente vinculada al usuario, si existe."""
+    if not user.is_authenticated:
+        return None
+    return Cliente.objects.filter(user=user).first()
+
+
+def pedidos_visibles(user):
+    """Pedidos que el usuario puede consultar según su rol."""
+    if rol_de(user) in ROLES_INTERNOS:
+        return Pedido.objects.all()
+    cliente = cliente_de(user)
+    if cliente:
+        return Pedido.objects.filter(cliente=cliente)
+    return Pedido.objects.none()
+
+
+def _detalle_queryset():
+    return Pedido.objects.select_related("cliente", "confirmado_por").prefetch_related(
+        "detalles__producto", "historial__usuario", "pagos", "despacho"
+    )
+
+
+# =========================================================================== #
+#  Tienda pública
+# =========================================================================== #
+
+
+def tienda(request):
+    categoria = request.GET.get("categoria", "").strip()
+    productos = (
+        Producto.objects.filter(activo=True)
+        .select_related("categoria")
+        .prefetch_related("ingredientes__insumo")
+    )
+    if categoria:
+        productos = productos.filter(categoria__nombre__iexact=categoria)
+
+    categorias = CategoriaProducto.objects.annotate(
+        total=Count("productos", filter=Q(productos__activo=True))
+    ).filter(total__gt=0)
+
+    lineas, total, unidades = carrito.detalle(request)
+    return render(
+        request,
+        "tienda.html",
+        {
+            "productos": productos,
+            "categorias": categorias,
+            "categoria_actual": categoria,
+            "lineas": lineas,
+            "carrito_total": total,
+            "carrito_unidades": unidades,
+        },
+    )
+
+
+def producto_detalle(request, pk):
+    producto = get_object_or_404(
+        Producto.objects.select_related("categoria").prefetch_related(
+            "ingredientes__insumo"
+        ),
+        pk=pk,
+        activo=True,
+    )
+    lineas, total, unidades = carrito.detalle(request)
+    return render(
+        request,
+        "producto_detalle.html",
+        {
+            "producto": producto,
+            "lineas": lineas,
+            "carrito_total": total,
+            "carrito_unidades": unidades,
+        },
+    )
+
+
+def carrito_ver(request):
+    lineas, total, unidades = carrito.detalle(request)
+    return render(
+        request,
+        "carrito.html",
+        {"lineas": lineas, "carrito_total": total, "carrito_unidades": unidades},
+    )
+
+
+@require_POST
+def carrito_agregar(request, pk):
+    producto = get_object_or_404(Producto, pk=pk, activo=True)
+    cantidad = request.POST.get("cantidad", 1)
+    try:
+        cantidad = max(int(cantidad), 1)
+    except (TypeError, ValueError):
+        cantidad = 1
+    carrito.agregar(
+        request,
+        producto,
+        cantidad=cantidad,
+        personalizacion=request.POST.get("personalizacion", "").strip(),
+    )
+    messages.success(request, f"Agregaste {producto.nombre} al carrito.")
+    return redirect(request.POST.get("next") or "carrito")
+
+
+@require_POST
+def carrito_actualizar(request, pk):
+    carrito.actualizar(request, pk, request.POST.get("cantidad", 1))
+    return redirect("carrito")
+
+
+@require_POST
+def carrito_quitar(request, pk):
+    carrito.quitar(request, pk)
+    messages.info(request, "Producto quitado del carrito.")
+    return redirect("carrito")
+
+
+def _cliente_para_checkout(request, form):
+    """Reutiliza la ficha del usuario o crea/actualiza una ficha de invitado."""
+    email = form.cleaned_data["email"].strip().lower()
+    nombre = form.cleaned_data["nombre"].strip()
+    telefono = form.cleaned_data["telefono"].strip()
+
+    cliente = cliente_de(request.user)
+    if cliente is None:
+        cliente = Cliente.objects.filter(email__iexact=email).first()
+    if cliente is None:
+        cliente = Cliente(nombre=nombre, email=email, telefono=telefono)
+    else:
+        cliente.nombre = cliente.nombre or nombre
+        cliente.email = cliente.email or email
+        cliente.telefono = cliente.telefono or telefono
+    if request.user.is_authenticated and cliente.user_id is None:
+        cliente.user = request.user
+    cliente.save()
+    return cliente
+
+
+def _validar_stock(lineas):
+    problemas = []
+    for linea in lineas:
+        producto = linea["producto"]
+        disponibles = producto.unidades_disponibles
+        if disponibles is None:
+            continue
+        if disponibles <= 0:
+            problemas.append(f"{producto.nombre} no tiene stock disponible hoy.")
+        elif linea["cantidad"] > disponibles:
+            problemas.append(
+                f"{producto.nombre}: pediste {linea['cantidad']} y solo se pueden "
+                f"producir {disponibles} con el stock actual."
+            )
+    if problemas:
+        raise DjangoValidationError(problemas)
+
+
+def checkout(request):
+    lineas, total, unidades = carrito.detalle(request)
+    if not lineas:
+        messages.info(request, "Tu carrito está vacío.")
+        return redirect("tienda")
+
+    cliente = cliente_de(request.user)
+    despacho = COSTO_DESPACHO
+
+    if request.method == "POST":
+        form = CheckoutForm(request.POST)
+        if form.is_valid():
+            try:
+                _validar_stock(lineas)
+                with transaction.atomic():
+                    pedido = _crear_pedido_web(request, form, lineas, despacho)
+            except DjangoValidationError as error:
+                for mensaje in error.messages:
+                    form.add_error(None, mensaje)
+            else:
+                carrito.vaciar(request)
+                messages.success(
+                    request,
+                    f"¡Pedido {pedido.codigo} recibido! Te contactaremos para "
+                    "coordinar el pago del anticipo.",
+                )
+                return redirect("seguimiento_detalle", token=pedido.token_seguimiento)
+    else:
+        initial = {
+            "nombre": (cliente.nombre if cliente else request.user.get_full_name()),
+            "telefono": cliente.telefono if cliente else "",
+            "email": (cliente.email if cliente else request.user.email),
+            "modalidad": "retiro",
+            "direccion_entrega": cliente.direccion if cliente else "",
+        }
+        form = CheckoutForm(initial=initial)
+
+    fecha_minima = timezone.localtime() + timedelta(hours=Pedido.LEAD_TIME_HORAS)
+    form.fields["fecha_entrega"].widget.attrs["min"] = fecha_minima.strftime(
+        "%Y-%m-%dT%H:%M"
+    )
+
+    return render(
+        request,
+        "checkout.html",
+        {
+            "form": form,
+            "lineas": lineas,
+            "carrito_total": total,
+            "carrito_unidades": unidades,
+            "costo_despacho": despacho,
+            "total_con_despacho": total + despacho,
+            "fecha_minima": fecha_minima,
+        },
+    )
+
+
+def _crear_pedido_web(request, form, lineas, costo_despacho):
+    datos = form.cleaned_data
+    cliente = _cliente_para_checkout(request, form)
+    modalidad = datos["modalidad"]
+
+    pedido = Pedido(
+        cliente=cliente,
+        canal="web",
+        modalidad=modalidad,
+        fecha_entrega=datos["fecha_entrega"],
+        direccion_entrega=datos["direccion_entrega"] if modalidad == "despacho" else "",
+        telefono_contacto=datos["telefono"],
+        descripcion_diseno=datos["descripcion_diseno"],
+        costo_despacho=costo_despacho if modalidad == "despacho" else Decimal("0"),
+        creado_por=request.user if request.user.is_authenticated else None,
+    )
+    pedido.full_clean(exclude=["codigo", "token_seguimiento"])
+    pedido.save()
+
+    for linea in lineas:
+        PedidoDetalle.objects.create(
+            pedido=pedido,
+            producto=linea["producto"],
+            cantidad=linea["cantidad"],
+            precio_unitario=linea["producto"].precio_base,
+            personalizacion=linea["personalizacion"],
+        )
+    return pedido
+
+
+def _puede_ver_contacto(request, pedido):
+    """Datos personales solo para el dueño del pedido o el personal interno."""
+    if not request.user.is_authenticated:
+        return False
+    return (
+        rol_de(request.user) in ROLES_INTERNOS
+        or pedido.cliente.user_id == request.user.id
+    )
+
+
+def seguimiento(request):
+    form = SeguimientoForm(request.GET or None)
+    pedido = None
+    if request.GET.get("codigo"):
+        if form.is_valid():
+            valor = form.cleaned_data["codigo"].strip()
+            pedido = (
+                _detalle_queryset()
+                .filter(Q(codigo__iexact=valor) | Q(token_seguimiento=valor))
+                .first()
+            )
+            if pedido is None:
+                form.add_error("codigo", "No encontramos un pedido con ese código.")
+    return render(
+        request,
+        "seguimiento.html",
+        {
+            "form": form,
+            "pedido": pedido,
+            "mostrar_contacto": pedido is not None
+            and _puede_ver_contacto(request, pedido),
+        },
+    )
+
+
+def seguimiento_detalle(request, token):
+    pedido = get_object_or_404(_detalle_queryset(), token_seguimiento=token)
+    return render(
+        request,
+        "seguimiento.html",
+        {
+            "form": SeguimientoForm(),
+            "pedido": pedido,
+            "publico": True,
+            "mostrar_contacto": _puede_ver_contacto(request, pedido),
+        },
+    )
+
+
+def registro(request):
+    if request.user.is_authenticated:
+        return redirect("home")
+
+    if request.method == "POST":
+        form = RegistroClienteForm(request.POST)
+        if form.is_valid():
+            datos = form.cleaned_data
+            with transaction.atomic():
+                user = User.objects.create_user(
+                    username=datos["username"],
+                    email=datos["email"],
+                    password=datos["password1"],
+                    first_name=datos["nombre"],
+                    last_name=datos["apellido"],
+                )
+                Perfil.objects.create(
+                    user=user, rol="cliente", telefono=datos["telefono"]
+                )
+                Cliente.objects.create(
+                    user=user,
+                    nombre=f"{datos['nombre']} {datos['apellido']}".strip(),
+                    telefono=datos["telefono"],
+                    email=datos["email"],
+                )
+            login(request, user)
+            messages.success(request, "¡Cuenta creada! Ya puedes hacer tu pedido.")
+            return redirect("tienda")
+    else:
+        form = RegistroClienteForm()
+
+    return render(request, "registro.html", {"form": form})
+
+
+@login_required
+def mis_pedidos(request):
+    if rol_de(request.user) in ROLES_INTERNOS:
+        return redirect("pedidos")
+    pedidos = (
+        pedidos_visibles(request.user)
+        .select_related("cliente")
+        .order_by("-fecha_pedido")
+    )
+    return render(request, "mis_pedidos.html", {"pedidos": pedidos})
+
+
+# =========================================================================== #
+#  Sesión y panel
+# =========================================================================== #
+
+
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("home")
@@ -205,7 +563,10 @@ def login_view(request):
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect(request.GET.get("next") or "home")
+            destino = request.GET.get("next") or (
+                "tienda" if rol_de(user) == "cliente" else "home"
+            )
+            return redirect(destino)
         messages.error(request, "Usuario o contraseña incorrectos.")
     return render(request, "login.html")
 
@@ -222,10 +583,17 @@ def home(request):
         return render(
             request,
             "landing.html",
-            {"productos": Producto.objects.filter(activo=True)[:3]},
+            {
+                "productos": Producto.objects.filter(activo=True)
+                .select_related("categoria")
+                .prefetch_related("ingredientes__insumo")[:6],
+                "categorias": CategoriaProducto.objects.all(),
+            },
         )
 
-    rol = rol_de(request.user)
+    if rol_de(request.user) == "cliente":
+        return redirect("tienda")
+
     hoy = timezone.localdate()
     pedidos = Pedido.objects.select_related("cliente")
     activos = pedidos.exclude(estado__in=["entregado", "cancelado"])
@@ -234,16 +602,14 @@ def home(request):
         "hoy": hoy,
         "total_pedidos": pedidos.count(),
         "pendientes": activos.count(),
-        "stock_bajo": Insumo.objects.filter(
-            stock_actual__lte=F("stock_minimo")
-        ).count(),
+        "stock_bajo": Insumo.objects.filter(stock_actual__lte=F("stock_minimo")).count(),
         "insumos_bajo": [
-            insumo
-            for insumo in Insumo.objects.select_related("categoria")
+            insumo for insumo in Insumo.objects.select_related("categoria")
             if insumo.stock_bajo
         ],
     }
 
+    rol = rol_de(request.user)
     if rol == "admin":
         contexto.update(
             {
@@ -252,6 +618,7 @@ def home(request):
                     (p.total for p in pedidos.exclude(estado="cancelado")), start=0
                 ),
                 "pedidos_hoy": pedidos.filter(fecha_pedido__date=hoy).count(),
+                "nuevos_web": pedidos.filter(canal="web", estado="recibido").count(),
                 "ultimos_movimientos": MovimientoInsumo.objects.select_related(
                     "insumo"
                 )[:5],
@@ -278,6 +645,7 @@ def home(request):
                 ),
                 "clientes_total": Cliente.objects.count(),
                 "productos_total": Producto.objects.filter(activo=True).count(),
+                "por_confirmar": pedidos.filter(estado="recibido").count(),
             }
         )
     elif rol == "cocina":
@@ -308,7 +676,9 @@ def home(request):
     elif rol == "despacho":
         contexto.update(
             {
-                "listos": pedidos.filter(estado="listo").order_by("fecha_entrega"),
+                "listos": pedidos.filter(
+                    estado="listo", modalidad="despacho"
+                ).order_by("fecha_entrega"),
                 "despachos_pendientes": Despacho.objects.select_related(
                     "pedido", "repartidor"
                 ).filter(fecha_entrega__isnull=True),
@@ -319,6 +689,145 @@ def home(request):
         )
 
     return render(request, "home.html", contexto)
+
+
+# =========================================================================== #
+#  Panel interno: pedidos
+# =========================================================================== #
+
+
+@login_required
+def pedidos_page(request):
+    if rol_de(request.user) not in ROLES_INTERNOS:
+        messages.error(request, "Tu rol no tiene acceso a esa sección.")
+        return redirect("home")
+
+    pedidos = Pedido.objects.select_related("cliente").order_by("-fecha_pedido")
+    estado = request.GET.get("estado", "")
+    busqueda = request.GET.get("q", "").strip()
+    if estado:
+        pedidos = pedidos.filter(estado=estado)
+    if busqueda:
+        pedidos = pedidos.filter(
+            Q(codigo__icontains=busqueda)
+            | Q(cliente__nombre__icontains=busqueda)
+            | Q(cliente__telefono__icontains=busqueda)
+        )
+
+    return render(
+        request,
+        "pedidos.html",
+        {
+            "pedidos": pedidos[:200],
+            "estados": Pedido.ESTADOS,
+            "estado_actual": estado,
+            "busqueda": busqueda,
+            "puede_crear": puede(request.user, "admin", "ventas"),
+            "form": PedidoInternoForm(),
+        },
+    )
+
+
+@rol_requerido("admin", "ventas")
+@require_POST
+def pedido_crear(request):
+    form = PedidoInternoForm(request.POST)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect("pedidos")
+
+    try:
+        with transaction.atomic():
+            pedido = form.save(commit=False)
+            pedido.creado_por = request.user
+            pedido.full_clean(exclude=["codigo", "token_seguimiento"])
+            pedido.save()
+            PedidoDetalle.objects.create(
+                pedido=pedido,
+                producto=form.cleaned_data["producto"],
+                cantidad=form.cleaned_data["cantidad"],
+                personalizacion=form.cleaned_data["personalizacion"],
+            )
+    except DjangoValidationError as error:
+        for mensaje in error.messages:
+            messages.error(request, mensaje)
+        return redirect("pedidos")
+
+    messages.success(request, f"Pedido {pedido.codigo} registrado correctamente.")
+    return redirect("pedido_detalle", pk=pedido.pk)
+
+
+@login_required
+def pedido_detalle_page(request, pk):
+    pedido = get_object_or_404(_detalle_queryset(), pk=pk)
+
+    es_interno = rol_de(request.user) in ROLES_INTERNOS
+    es_dueno = pedido.cliente.user_id == request.user.id
+    if not es_interno and not es_dueno:
+        messages.error(request, "No tienes acceso a ese pedido.")
+        return redirect("mis_pedidos" if rol_de(request.user) == "cliente" else "home")
+
+    return render(
+        request,
+        "pedido_detalle.html",
+        {
+            "pedido": pedido,
+            "es_interno": es_interno,
+            "puede_crear_pago": puede(request.user, "admin", "ventas"),
+            "pago_form": PagoForm(initial={"tipo": "anticipo"}),
+            "estado_form": EstadoForm(),
+        },
+    )
+
+
+@rol_requerido("admin", "ventas", "cocina", "calidad", "despacho")
+@require_POST
+def pedido_cambiar_estado(request, pk):
+    pedido = get_object_or_404(Pedido, pk=pk)
+    nuevo_estado = request.POST.get("estado", "")
+    comentario = request.POST.get("comentario", "").strip()
+    try:
+        pedido.cambiar_estado(
+            nuevo_estado, usuario=request.user, comentario=comentario
+        )
+    except DjangoValidationError as error:
+        for mensaje in error.messages:
+            messages.error(request, mensaje)
+    else:
+        messages.success(
+            request,
+            f"{pedido.codigo} pasó a {pedido.get_estado_display()}.",
+        )
+    return redirect(request.POST.get("next") or f"/pedidos/{pedido.pk}/")
+
+
+@rol_requerido("admin", "ventas")
+@require_POST
+def pedido_registrar_pago(request, pk):
+    pedido = get_object_or_404(Pedido, pk=pk)
+    form = PagoForm(request.POST)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+    else:
+        pago = form.save(commit=False)
+        pago.pedido = pedido
+        pago.registrado_por = request.user
+        pago.full_clean()
+        pago.save()
+        messages.success(
+            request,
+            f"Pago de ${pago.monto} registrado. Estado: {pedido.estado_pago_display}.",
+        )
+    return redirect("pedido_detalle", pk=pedido.pk)
+
+
+# =========================================================================== #
+#  Panel interno: producción, inventario y despachos
+# =========================================================================== #
 
 
 @rol_requerido("admin", "cocina", "calidad")
@@ -339,19 +848,6 @@ def kanban_page(request):
     return render(request, "kanban.html", {"columnas": columnas})
 
 
-@login_required
-def pedidos_page(request):
-    return render(
-        request,
-        "pedidos.html",
-        {
-            "clientes": Cliente.objects.all(),
-            "productos": Producto.objects.filter(activo=True),
-            "puede_crear": puede(request.user, "admin", "ventas"),
-        },
-    )
-
-
 @rol_requerido("admin", "cocina", "calidad")
 def inventario_page(request):
     return render(
@@ -370,45 +866,46 @@ def despachos_page(request):
         request,
         "despachos.html",
         {
-            "despachos": Despacho.objects.select_related("pedido", "repartidor"),
-            "pedidos_listos": Pedido.objects.filter(estado="listo"),
+            "despachos": Despacho.objects.select_related(
+                "pedido__cliente", "repartidor"
+            ).order_by("-fecha_salida"),
+            "form": DespachoForm(),
+            "confirmar_form": ConfirmarEntregaForm(),
+            "retiros": Pedido.objects.filter(
+                estado="listo", modalidad="retiro"
+            ).select_related("cliente"),
         },
     )
-
-
-@login_required
-def pedido_detalle_page(request, pk):
-    pedido = get_object_or_404(
-        Pedido.objects.select_related("cliente").prefetch_related(
-            "detalles__producto", "historial"
-        ),
-        pk=pk,
-    )
-    return render(request, "pedido_detalle.html", {"pedido": pedido})
 
 
 @rol_requerido("admin", "despacho")
 @require_POST
 def despacho_crear(request):
-    """Crea el despacho de un pedido que ya está en estado 'listo'."""
-    pedido = get_object_or_404(Pedido, pk=request.POST.get("pedido"))
-    if pedido.estado != "listo":
-        messages.error(
-            request,
-            "Solo se puede crear un despacho para un pedido en estado Listo.",
-        )
+    """Asigna el reparto y deja el pedido en estado Despachado."""
+    form = DespachoForm(request.POST)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
         return redirect("despachos")
 
-    direccion = request.POST.get("direccion", "").strip() or pedido.cliente.direccion
-    _, creado = Despacho.objects.get_or_create(
-        pedido=pedido, defaults={"direccion": direccion or "Retiro en tienda"}
-    )
-
-    if creado:
-        messages.success(request, f"Despacho creado para el pedido {pedido.codigo}.")
+    try:
+        with transaction.atomic():
+            despacho = form.save()
+            despacho.full_clean()
+            despacho.save()
+            despacho.pedido.cambiar_estado(
+                "despachado",
+                usuario=request.user,
+                comentario="Pedido asignado a reparto.",
+            )
+    except DjangoValidationError as error:
+        for mensaje in error.messages:
+            messages.error(request, mensaje)
     else:
-        messages.info(
-            request, f"El pedido {pedido.codigo} ya tiene un despacho registrado."
+        messages.success(
+            request,
+            f"Despacho creado para {despacho.pedido.codigo}; el pedido salió a reparto.",
         )
     return redirect("despachos")
 
@@ -416,46 +913,73 @@ def despacho_crear(request):
 @rol_requerido("admin", "despacho")
 @require_POST
 def despacho_confirmar(request, pk):
-    """Confirma la entrega con firma digital o comprobante fotográfico."""
-    despacho = get_object_or_404(Despacho.objects.select_related("pedido"), pk=pk)
-
-    if despacho.confirmado:
-        messages.error(request, "Este despacho ya fue confirmado anteriormente.")
+    """Confirma la entrega con firma o comprobante y cierra el pedido."""
+    despacho = get_object_or_404(
+        Despacho.objects.select_related("pedido"), pk=pk
+    )
+    form = ConfirmarEntregaForm(request.POST, request.FILES)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
         return redirect("despachos")
 
-    receptor = request.POST.get("receptor_nombre", "").strip()
-    if not receptor:
-        messages.error(request, "Debes indicar quién recibe la entrega.")
-        return redirect("despachos")
-
-    despacho.receptor_nombre = receptor
+    despacho.receptor_nombre = form.cleaned_data["receptor_nombre"]
+    despacho.observaciones = form.cleaned_data["observaciones"]
+    despacho.firma = form.cleaned_data["firma"]
+    despacho.comprobante = form.cleaned_data["comprobante"]
     despacho.fecha_entrega = timezone.now()
-    despacho.observaciones = request.POST.get("observaciones", despacho.observaciones)
-
-    if request.FILES.get("firma"):
-        despacho.firma = request.FILES["firma"]
-    if request.FILES.get("comprobante"):
-        despacho.comprobante = request.FILES["comprobante"]
+    despacho.confirmado_por = request.user
 
     try:
         with transaction.atomic():
             despacho.full_clean()
             despacho.save()
-
-            if despacho.pedido.estado != "entregado":
-                despacho.pedido.cambiar_estado(
-                    "entregado",
-                    usuario=request.user,
-                    comentario=f"Entrega confirmada del despacho {despacho.pk}.",
-                )
+            despacho.pedido.cambiar_estado(
+                "entregado",
+                usuario=request.user,
+                comentario=f"Entrega confirmada del despacho {despacho.pk}.",
+            )
     except DjangoValidationError as error:
-        messages.error(request, " ".join(error.messages))
+        for mensaje in error.messages:
+            messages.error(request, mensaje)
+    else:
+        messages.success(
+            request,
+            f"Entrega del pedido {despacho.pedido.codigo} confirmada correctamente.",
+        )
+    return redirect("despachos")
+
+
+@rol_requerido("admin", "ventas", "despacho")
+@require_POST
+def retiro_confirmar(request, pk):
+    """Cierra un pedido de retiro indicando quién lo retiró."""
+    pedido = get_object_or_404(Pedido, pk=pk)
+    retirado_por = request.POST.get("retirado_por", "").strip()
+    if not retirado_por:
+        messages.error(request, "Indica quién retira el pedido.")
         return redirect("despachos")
 
-    messages.success(
-        request, f"Entrega del pedido {despacho.pedido.codigo} confirmada correctamente."
-    )
+    pedido.retirado_por = retirado_por
+    pedido.save(update_fields=["retirado_por"])
+    try:
+        pedido.cambiar_estado(
+            "entregado",
+            usuario=request.user,
+            comentario=f"Retirado en tienda por {retirado_por}.",
+        )
+    except DjangoValidationError as error:
+        for mensaje in error.messages:
+            messages.error(request, mensaje)
+    else:
+        messages.success(request, f"Pedido {pedido.codigo} entregado en tienda.")
     return redirect("despachos")
+
+
+# =========================================================================== #
+#  Sitio informativo
+# =========================================================================== #
 
 
 def quienes_somos(request):
@@ -463,7 +987,11 @@ def quienes_somos(request):
 
 
 def servicios(request):
-    return render(request, "servicios.html")
+    return render(
+        request,
+        "servicios.html",
+        {"productos": Producto.objects.filter(activo=True)[:6]},
+    )
 
 
 def contacto(request):

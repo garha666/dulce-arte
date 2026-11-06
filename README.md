@@ -1,8 +1,10 @@
-﻿# Dulce Arte — Sistema de trazabilidad y pedidos
+﻿# Dulce Arte — Tienda de pastelería y trazabilidad de pedidos
 
-Aplicación web fullstack para una pastelería artesanal: cotización de pedidos personalizados,
-tablero Kanban de cocina, descuento automático de insumos por receta (BOM) y despacho con
-confirmación de entrega mediante firma digital o comprobante fotográfico.
+Aplicación web fullstack para una pastelería artesanal: catálogo público con carrito y checkout,
+reserva de cupos con anticipación, pago de anticipo, seguimiento del pedido, tablero Kanban de
+cocina, descuento de insumos por receta (BOM), despacho con evidencia y panel interno por roles.
+La API REST queda reservada a administración; el resto del equipo y los clientes trabajan con
+páginas Django server-side.
 
 **Evaluación N°3 — Desarrollo Backend**
 
@@ -18,42 +20,54 @@ confirmación de entrega mediante firma digital o comprobante fotográfico.
 |---|---|
 | Backend | Django 5.2 + Django REST Framework |
 | Base de datos | PostgreSQL 16 (EC2 y Docker local) |
-| Frontend | Templates Django + HTML/CSS/JS nativo (fetch) |
+| Frontend | Templates Django + HTML/CSS/JS nativo (sin frameworks ni fetch a la API) |
 | Servidor de aplicación | Gunicorn (socket Unix, servicio systemd) |
 | Proxy inverso | Nginx |
 | Nube | AWS Academy — instancia EC2 Ubuntu 22.04 + Elastic IP |
 
-## Funcionalidades (las 4 del caso)
+## Funcionalidades
 
-1. **Cotización y registro de pedidos**: cliente, productos, diseño, fecha/hora de entrega,
-   anticipo y cálculo automático de total y saldo.
-2. **Tablero Kanban de cocina**: Recibido → En preparación → Horneado/Decorado →
-   Control de calidad → Listo → Despachado → Entregado, con transiciones validadas e historial.
-3. **Descuento de insumos por BOM**: al pasar a "En preparación" se descuentan los insumos de la
-   receta; si no alcanza el stock, la operación se rechaza y se informan los faltantes.
-4. **Despacho con confirmación**: ruta, receptor, firma digital o comprobante fotográfico.
+1. **Tienda en línea**: catálogo por categorías, disponibilidad calculada desde el BOM, carrito en
+   sesión, checkout con retiro o despacho, seguimiento público y cuenta de cliente.
+2. **Agenda real**: 48 horas de anticipación para pedidos web, horario 09:00–18:59 de Santiago y
+   cupo diario de 6 pedidos; el mostrador puede agendar sin anticipación pero respeta horario y cupo.
+3. **Pagos**: registro de abonos por efectivo, transferencia o tarjeta; `estado_pago` y `saldo` se
+   calculan desde los pagos y ningún pedido entra a producción sin pago registrado.
+4. **Tablero Kanban de cocina**: Recibido → Confirmado → En preparación → Horneado/Decorado →
+   Control de calidad → Listo → Despachado → Entregado, con historial y transiciones validadas.
+5. **Descuento de insumos por BOM**: al pasar a “En preparación” se descuentan los insumos de la
+   receta; si falta stock se rechaza, y una cancelación repone lo consumido.
+6. **Despacho y retiro**: la ruta deja el pedido en `despachado`; la entrega se cierra con firma o
+   comprobante. El retiro exige registrar quién retira.
+7. **Panel interno por roles**: ventas, cocina, calidad y despacho con formularios Django; sin
+   llamadas a la API.
+8. **API administrativa**: DRF disponible solo para el rol administrador, con acciones
+   `cambiar_estado` y `descontar_insumos`.
 
 ## Estructura
 
 ```
 dulce-arte/
 ├── drf/                  # proyecto Django (settings, urls, wsgi)
-├── api/                  # app única: modelos, admin, API y vistas HTML
-│   ├── models.py         # dominio en 3FN + reglas de negocio
-│   ├── admin.py          # Admin personalizado
+├── api/                  # app única: dominio, tienda, panel y API
+│   ├── models.py         # dominio en 3FN + agenda, pagos y reglas de negocio
+│   ├── carrito.py        # carrito en sesión con precios frescos
+│   ├── forms.py          # formularios de tienda y panel interno
+│   ├── views.py          # tienda, cuenta, panel, acciones y ViewSets
 │   ├── serializers.py
-│   ├── views.py          # ViewSets + páginas
-│   ├── permissions.py    # permisos de API por rol
-│   ├── roles.py          # roles, menús y permisos compartidos
+│   ├── permissions.py    # EsAdministrador: única llave de la API
+│   ├── roles.py          # roles, menús y permisos de navegación
 │   ├── context_processors.py
+│   ├── admin.py          # Admin personalizado
+│   ├── migrations/
 │   └── urls.py
-├── templates/            # landing, paneles por rol, kanban, pedidos, inventario, despachos…
-├── static/               # css/estilos.css, fonts/ y js (kanban, pedidos)
-├── docs/                 # constitución y modelo de datos (3FN)
-├── specs/                # especificación SDD (spec, plan, tasks)
+├── templates/            # tienda, cuenta, paneles por rol y sitio público
+├── static/               # css/estilos.css y fonts/ (sin JS de negocio)
+├── docs/                 # constitución, modelo de datos, guion y ADRs
+├── specs/                # especificaciones SDD 001 y 002
 ├── deploy/               # gunicorn.service, nginx.conf, guía de despliegue
-├── seed_data.py          # datos de prueba
-├── smoke_test.py         # verificación rápida
+├── seed_data.py          # datos de prueba (incluye cliente demo)
+├── smoke_test.py         # verificación rápida no destructiva
 └── docker-compose.yml    # PostgreSQL local
 ```
 
@@ -80,18 +94,19 @@ python seed_data.py
 python manage.py runserver
 ```
 
-Abrir <http://127.0.0.1:8000/> → landing pública. El panel de gestión está en
-<http://127.0.0.1:8000/login/> y muestra métricas distintas según el rol.
+Abrir <http://127.0.0.1:8000/> → landing pública. La tienda está en `/tienda/`, el panel interno
+en `/login/` y el Admin de Django en `/admin/`.
 
 ### Usuarios de prueba
 
 | Usuario | Clave | Rol |
 |---|---|---|
-| `admin` | `Dulce2026!` | Administrador (accede a `/admin/`) |
-| `ventas` | `Dulce2026!` | Cotizaciones |
+| `admin` | `Dulce2026!` | Administrador (panel, Admin y API) |
+| `ventas` | `Dulce2026!` | Pedidos, pagos y confirmación |
 | `cocina` | `Dulce2026!` | Kanban de producción |
 | `calidad` | `Dulce2026!` | Control de calidad |
-| `despacho` | `Dulce2026!` | Reparto |
+| `despacho` | `Dulce2026!` | Reparto y retiros |
+| `cliente` | `Cliente2026!` | Cliente demo con historial |
 
 > Estas claves son solo para la demo local. Cámbialas antes de publicar la instancia EC2.
 
@@ -99,45 +114,57 @@ Abrir <http://127.0.0.1:8000/> → landing pública. El panel de gestión está 
 
 | Ruta | Descripción | Acceso |
 |---|---|---|
-| `/` | Landing pública; si hay sesión, panel con métricas y alertas | Público / autenticado |
-| `/pedidos/` | Registrar pedidos (ventas/admin) y ver el listado | Autenticado |
-| `/kanban/` | Tablero de producción y cambio de estados | admin, cocina, calidad |
+| `/` | Landing pública; con sesión interna, panel según rol | Público |
+| `/tienda/` | Catálogo con filtros por categoría y disponibilidad | Público |
+| `/tienda/<id>/` | Detalle del producto, receta y personalización | Público |
+| `/carrito/` | Carrito en sesión y resumen | Público |
+| `/checkout/` | Datos de entrega, agenda y forma de pago | Público |
+| `/seguimiento/` | Seguimiento por código o token | Público |
+| `/registro/` | Crear cuenta de cliente | Público |
+| `/mis-pedidos/` | Historial del cliente autenticado | Cliente |
+| `/pedidos/` | Listado, alta de mostrador y filtros | admin, ventas, cocina, calidad, despacho |
+| `/pedidos/<id>/` | Detalle, pagos y transiciones | Dueño o personal interno |
+| `/kanban/` | Tablero de producción | admin, cocina, calidad |
 | `/inventario/` | Stock de insumos y recetas (BOM) | admin, cocina, calidad |
-| `/despachos/` | Crear despacho y confirmar entrega con evidencia | admin, despacho |
+| `/despachos/` | Rutas, evidencia de entrega y retiros | admin, despacho |
 | `/quienes-somos/`, `/servicios/`, `/contacto/` | Sitio público | Público |
 | `/admin/` | Django Admin personalizado | admin |
-| `/api/` | Navegador de la API DRF | Autenticado |
+| `/api/` | API DRF | **solo admin** |
 
-## Endpoints de la API
+## API administrativa
 
-| Método | Endpoint | Descripción | Roles de escritura |
-|---|---|---|---|
-| GET/POST | `/api/pedidos/` | Listar / crear pedidos (con detalles anidados) | admin, ventas |
-| GET/PUT/PATCH/DELETE | `/api/pedidos/{id}/` | CRUD de un pedido (bloqueado tras descontar BOM) | admin, ventas |
-| POST | `/api/pedidos/{id}/cambiar_estado/` | Mover en el Kanban (valida flujo y descuenta BOM) | admin, cocina, calidad |
-| POST | `/api/pedidos/{id}/descontar_insumos/` | Forzar descuento de insumos | admin, cocina, calidad |
-| GET/POST | `/api/clientes/`, `/api/productos/`, `/api/insumos/` | Catálogos | solo admin |
-| GET/POST | `/api/despachos/` | Despachos (solo para pedidos listos; valida firma/comprobante) | admin, despacho |
-| GET | `/api/movimientos/` | Auditoría de movimientos de insumos | solo lectura |
+La API existe para integraciones y automatizaciones del administrador; no es el canal del
+personal operativo. El permiso global es `api.permissions.EsAdministrador`: un usuario
+autenticado sin rol `admin` recibe **403** y un visitante **401/403**.
 
-La API exige sesión iniciada (`IsAuthenticated`) y aplica los mismos roles que las páginas
-(`api/permissions.py`). Los roles sin permiso reciben **403**, no un 400 de validación. En el
-navegador de DRF se puede iniciar sesión con `/admin/` y volver a `/api/`.
+| Método | Endpoint | Descripción |
+|---|---|---|
+| GET/POST | `/api/pedidos/` | Listar / crear pedidos con detalles anidados |
+| GET/PUT/PATCH/DELETE | `/api/pedidos/{id}/` | CRUD (no elimina pedidos con insumos descontados) |
+| POST | `/api/pedidos/{id}/cambiar_estado/` | Mover en el Kanban validando el flujo |
+| POST | `/api/pedidos/{id}/descontar_insumos/` | Forzar el descuento del BOM |
+| GET/POST | `/api/clientes/`, `/api/productos/`, `/api/insumos/` | Catálogos |
+| GET/POST | `/api/despachos/` | Rutas y confirmación de entrega |
+| GET/POST | `/api/pagos/` | Abonos registrados |
+| GET | `/api/movimientos/` | Auditoría de inventario |
+
+> Las pantallas internas y la tienda **no** usan `fetch` ni `/api/`: todo se resuelve con
+> formularios y render del servidor. Lo verifica `FrontendSeguridadTest`.
 
 ## Reglas de negocio implementadas
 
-- Flujo de estados restringido (`Pedido.TRANSICIONES`); transición inválida → **400**.
-- Descuento de insumos **atómico** y **una sola vez** por pedido (`select_for_update` + bandera).
-- Stock insuficiente → se cancela el cambio de estado con el listado de faltantes.
-- `Pedido.cambiar_estado("entregado")` exige un despacho confirmado con firma o comprobante.
-- `Despacho.clean()` y `DespachoSerializer` exigen receptor y evidencia para confirmar.
-- Un despacho solo se crea para pedidos en estado **Listo** (RF-13), tanto en la vista HTML como
-  en la API; la confirmación es atómica y deja el pedido en **Entregado**.
-- No se puede confirmar dos veces el mismo despacho.
-- Los pedidos con `insumos_descontados=True` no se pueden editar ni eliminar por la API.
-- Permisos por rol compartidos entre HTML y API: ventas no mueve el Kanban ni descuenta insumos;
-  cocina/calidad no crean ni borran pedidos o despachos; despacho gestiona sus rutas.
-- El listado JS escapa `cliente_nombre` y el código antes de insertarlos en el DOM.
+- Flujo restringido (`Pedido.TRANSICIONES`); transición inválida → error y sin cambios.
+- Producción no arranca sin `confirmado`; `confirmado` exige al menos un pago registrado.
+- Descuento de insumos **atómico** y **una sola vez** (`select_for_update` + bandera).
+- Cancelación con insumos descontados → movimientos de entrada que reponen el stock.
+- Agenda: 48 h para pedidos web, 09:00–18:59 en `America/Santiago` y cupo de 6 por día; el cupo
+  se cuenta con rango de fecha local para no desplazarse por UTC.
+- Despacho a domicilio exige dirección; retiro no tiene costo y el despacho cuesta $3.500.
+- Crear ruta → pedido `despachado`; confirmar con receptor y firma/comprobante → `entregado`.
+- Retiro → `entregado` solo con `retirado_por` registrado.
+- `estado_pago` y `saldo` se derivan de `Pago`, con `anticipo` solo como respaldo histórico.
+- Los pedidos con `insumos_descontados=True` no se pueden eliminar por la API.
+- Un cliente solo ve sus pedidos; el seguimiento público no expone datos personales.
 
 ## Verificación
 
@@ -147,10 +174,10 @@ python manage.py test api
 python smoke_test.py
 ```
 
-Resultado esperado: todas las pruebas de `api/tests.py` OK (permisos, despacho, BOM y escape
-del frontend), todas las páginas en 200, cambio de estado 200 con descuento de stock y
-transición inválida 400. `smoke_test.py` falla de forma explícita si no hay un pedido en estado
-`recibido` para probar la transición central.
+Resultado esperado: `manage.py check` sin errores, **43 pruebas OK** en `api/tests.py` (flujo,
+pagos, agenda, despacho, tienda, cuenta, API admin-only, BOM y frontend) y `smoke_test.py` con
+todas las páginas en 200, 403 para ventas/cocina/cliente en la API y descuento/reposición de
+stock dentro de una transacción con rollback.
 
 ## Despliegue en AWS EC2
 
@@ -160,7 +187,7 @@ También hay un script idempotente: `bash deploy/instalar.sh`.
 
 Antes de publicar la instancia:
 
-- Cambiar la clave de los usuarios demo (`admin`, `ventas`, etc.) o no ejecutar el seed
+- Cambiar la clave de los usuarios demo (`admin`, `ventas`, `cliente`, etc.) o no ejecutar el seed
   (`SEED_DEMO_DATA=true` solo para una demo controlada).
 - Reemplazar `SECRET_KEY` y la contraseña de PostgreSQL en `.env`; no reutilizar las de ejemplo.
 - Mantener `DJANGO_DEBUG=False`, configurar `ALLOWED_HOSTS` con la IP elástica y usar HTTPS
@@ -171,4 +198,5 @@ Antes de publicar la instancia:
 ## Defensa
 
 Guion de demostración y preguntas frecuentes: [`docs/GUION_DEFENSA.md`](docs/GUION_DEFENSA.md).
-
+Decisiones de arquitectura: [`docs/adr/`](docs/adr/). Vocabulario del dominio:
+[`GLOSSARY.md`](GLOSSARY.md).

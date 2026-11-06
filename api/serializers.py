@@ -9,6 +9,7 @@ from .models import (
     Insumo,
     MensajeContacto,
     MovimientoInsumo,
+    Pago,
     Pedido,
     PedidoDetalle,
     Perfil,
@@ -59,9 +60,12 @@ class RecetaInsumoSerializer(serializers.ModelSerializer):
 
 class ProductoSerializer(serializers.ModelSerializer):
     ingredientes = RecetaInsumoSerializer(many=True, required=False)
+    categoria_nombre = serializers.CharField(source="categoria.nombre", read_only=True)
     costo_estimado = serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True
     )
+    unidades_disponibles = serializers.IntegerField(read_only=True, allow_null=True)
+    disponible = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Producto
@@ -73,8 +77,12 @@ class ProductoSerializer(serializers.ModelSerializer):
             "porciones",
             "activo",
             "imagen",
+            "categoria",
+            "categoria_nombre",
             "ingredientes",
             "costo_estimado",
+            "unidades_disponibles",
+            "disponible",
         )
 
     def create(self, validated_data):
@@ -143,6 +151,7 @@ class DespachoSerializer(serializers.ModelSerializer):
             "fecha_salida",
             "fecha_entrega",
             "receptor_nombre",
+            "confirmado_por",
             "firma",
             "comprobante",
             "observaciones",
@@ -181,12 +190,38 @@ class DespachoSerializer(serializers.ModelSerializer):
         return datos
 
 
+class PagoSerializer(serializers.ModelSerializer):
+    metodo_display = serializers.CharField(source="get_metodo_display", read_only=True)
+    tipo_display = serializers.CharField(source="get_tipo_display", read_only=True)
+
+    class Meta:
+        model = Pago
+        fields = (
+            "id",
+            "pedido",
+            "monto",
+            "metodo",
+            "metodo_display",
+            "tipo",
+            "tipo_display",
+            "referencia",
+            "registrado_por",
+            "fecha",
+        )
+        read_only_fields = ("fecha",)
+
+
 class PedidoSerializer(serializers.ModelSerializer):
     detalles = PedidoDetalleSerializer(many=True, required=False)
+    pagos = PagoSerializer(many=True, read_only=True)
     cliente_nombre = serializers.CharField(source="cliente.nombre", read_only=True)
     estado_display = serializers.CharField(source="get_estado_display", read_only=True)
     total = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    total_pagado = serializers.DecimalField(
+        max_digits=12, decimal_places=2, read_only=True
+    )
     saldo = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    estado_pago = serializers.CharField(read_only=True)
     historial = HistorialEstadoSerializer(many=True, read_only=True)
 
     class Meta:
@@ -194,24 +229,43 @@ class PedidoSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "codigo",
+            "token_seguimiento",
             "cliente",
             "cliente_nombre",
+            "canal",
+            "modalidad",
             "estado",
             "estado_display",
             "fecha_pedido",
             "fecha_entrega",
+            "direccion_entrega",
+            "telefono_contacto",
             "descripcion_diseno",
             "imagen_referencia",
             "anticipo",
             "costo_despacho",
             "observaciones",
+            "retirado_por",
             "insumos_descontados",
+            "confirmado_en",
+            "confirmado_por",
             "total",
+            "total_pagado",
             "saldo",
+            "estado_pago",
             "detalles",
+            "pagos",
             "historial",
         )
-        read_only_fields = ("codigo", "fecha_pedido", "insumos_descontados", "estado")
+        read_only_fields = (
+            "codigo",
+            "token_seguimiento",
+            "fecha_pedido",
+            "insumos_descontados",
+            "estado",
+            "confirmado_en",
+            "confirmado_por",
+        )
 
     def validate(self, datos):
         # RF-4: un pedido nuevo debe incluir al menos un producto.

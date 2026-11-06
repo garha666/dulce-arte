@@ -1,6 +1,7 @@
 # Spec 001 — Núcleo de trazabilidad de pedidos (Dulce Arte)
 
-Estado: implementada
+Estado: implementada. La spec 002 reemplaza el acceso de la API (ahora solo administración), el
+flujo de estados (agrega `confirmado` y usa `despachado`) y el modelo de pagos (ver spec 002).
 
 ## Contexto y objetivo
 La pastelería Dulce Arte coordina pedidos personalizados entre ventas, cocina y despacho.

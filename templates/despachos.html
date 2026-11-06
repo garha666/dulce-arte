@@ -4,62 +4,126 @@
 {% block content %}
 <section class="page-head">
     <div>
-        <p class="panel-role">Reparto</p>
-        <h1>Rutas de despacho</h1>
-        <p class="lede">Asigna el despacho de un pedido listo y confirma la entrega con firma digital o comprobante fotográfico.</p>
+        <p class="panel-role">Reparto y retiro</p>
+        <h1>Despachos</h1>
+        <p class="lede">
+            Asigna el reparto de un pedido listo y confirma la entrega con firma
+            digital o comprobante fotográfico. Los retiros se cierran en tienda.
+        </p>
     </div>
 </section>
 
 <section class="grid-2">
     <div class="panel">
-        <h2>Crear despacho</h2>
-        <form method="post" action="{% url 'despacho_crear' %}" class="form">
+        <h2>Asignar despacho</h2>
+        <p class="muted small">Solo aparecen pedidos listos con modalidad “Despacho a domicilio”.</p>
+        <form method="post" action="{% url 'despacho_crear' %}" class="form mt">
             {% csrf_token %}
-            <label>Pedido listo
-                <select name="pedido" required>
-                    <option value="">Seleccione…</option>
-                    {% for pedido in pedidos_listos %}
-                        <option value="{{ pedido.pk }}">{{ pedido.codigo }} · {{ pedido.cliente.nombre }}</option>
-                    {% endfor %}
-                </select>
+            <label>Pedido
+                {{ form.pedido }}
+                {% if form.pedido.errors %}<span class="field-error">{{ form.pedido.errors|striptags }}</span>{% endif %}
+            </label>
+            <label>Repartidor
+                {{ form.repartidor }}
             </label>
             <label>Dirección de entrega
-                <input type="text" name="direccion" placeholder="Calle, número, comuna" required>
+                {{ form.direccion }}
+                {% if form.direccion.errors %}<span class="field-error">{{ form.direccion.errors|striptags }}</span>{% endif %}
             </label>
-            <button class="btn btn-solid" type="submit">Crear despacho</button>
+            <label>Observaciones de ruta
+                {{ form.observaciones }}
+            </label>
+            <button class="btn btn-solid" type="submit">Crear despacho y sacar a reparto</button>
         </form>
     </div>
 
     <div class="panel">
-        <h2>Despachos registrados</h2>
-        {% for despacho in despachos %}
-        <article class="despacho-card">
+        <h2>Retiros pendientes</h2>
+        <p class="muted small">Pedidos listos para retirar en tienda.</p>
+        {% for pedido in retiros %}
+        <div class="despacho-card">
             <header>
-                <strong>{{ despacho.pedido.codigo }}</strong>
-                <span class="badge {% if despacho.confirmado %}badge-ok{% else %}badge-warn{% endif %}">
-                    {% if despacho.confirmado %}Confirmado{% else %}Pendiente{% endif %}
-                </span>
+                <strong>{{ pedido.codigo }}</strong>
+                <span class="muted small">{{ pedido.fecha_entrega|date:"d/m H:i" }}</span>
             </header>
-            <p class="muted">{{ despacho.direccion }}</p>
-
-            {% if not despacho.confirmado %}
-            <form method="post" action="{% url 'despacho_confirmar' despacho.pk %}" enctype="multipart/form-data" class="form-inline">
+            <p class="muted small">{{ pedido.cliente.nombre }} · ${{ pedido.total|floatformat:0 }}</p>
+            <form method="post" action="{% url 'retiro_confirmar' pedido.pk %}" class="form-inline">
                 {% csrf_token %}
-                <input type="text" name="receptor_nombre" placeholder="Quién recibe" required>
-                <label class="file">Firma digital <input type="file" name="firma" accept="image/*"></label>
-                <label class="file">Comprobante <input type="file" name="comprobante" accept="image/*"></label>
-                <button class="btn btn-mini btn-solid" type="submit">Confirmar entrega</button>
+                <label class="grow">Retira
+                    <input type="text" name="retirado_por" placeholder="Nombre de quien retira" required>
+                </label>
+                <button class="btn btn-solid btn-mini" type="submit">Confirmar retiro</button>
             </form>
-            {% else %}
-                <p class="muted">Recibido por {{ despacho.receptor_nombre|default:"—" }} el
-                    {{ despacho.fecha_entrega|date:"d/m/Y H:i" }}</p>
-                {% if despacho.firma %}<p><a href="{{ despacho.firma.url }}" target="_blank">Ver firma</a></p>{% endif %}
-                {% if despacho.comprobante %}<p><a href="{{ despacho.comprobante.url }}" target="_blank">Ver comprobante</a></p>{% endif %}
-            {% endif %}
-        </article>
+        </div>
         {% empty %}
-            <p class="muted">Todavía no hay despachos registrados.</p>
+        <p class="empty">No hay retiros pendientes.</p>
         {% endfor %}
     </div>
+</section>
+
+<section class="mt">
+    <div class="section-head">
+        <h2>Rutas registradas</h2>
+    </div>
+
+    {% for despacho in despachos %}
+    <article class="despacho-card">
+        <header>
+            <div>
+                <strong>{{ despacho.pedido.codigo }}</strong>
+                <span class="muted small">· {{ despacho.pedido.cliente.nombre }}</span>
+            </div>
+            {% if despacho.confirmado %}
+                <span class="badge badge-ok">Entregado</span>
+            {% elif despacho.fecha_salida %}
+                <span class="badge estado-despachado">En reparto</span>
+            {% else %}
+                <span class="badge badge-warn">Pendiente</span>
+            {% endif %}
+        </header>
+
+        <dl class="detail-list">
+            <div><dt>Dirección</dt><dd>{{ despacho.direccion }}</dd></div>
+            <div><dt>Repartidor</dt><dd>{{ despacho.repartidor.get_full_name|default:"Sin asignar" }}</dd></div>
+            <div><dt>Salida</dt><dd>{{ despacho.fecha_salida|date:"d/m/Y H:i"|default:"—" }}</dd></div>
+            <div><dt>Entrega</dt><dd>{{ despacho.fecha_entrega|date:"d/m/Y H:i"|default:"—" }}</dd></div>
+        </dl>
+
+        {% if despacho.confirmado %}
+            <p class="muted small">
+                Recibió {{ despacho.receptor_nombre }}
+                {% if despacho.confirmado_por %}· registrado por {{ despacho.confirmado_por.username }}{% endif %}.
+            </p>
+        {% else %}
+            <details class="mt">
+                <summary class="link">Confirmar entrega</summary>
+                <form method="post" action="{% url 'despacho_confirmar' despacho.pk %}"
+                      enctype="multipart/form-data" class="form mt">
+                    {% csrf_token %}
+                    <div class="form-row">
+                        <label>Quién recibe
+                            <input type="text" name="receptor_nombre" required>
+                        </label>
+                        <label>Observaciones
+                            <input type="text" name="observaciones" placeholder="Novedades de la entrega">
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label>Firma digital
+                            <input type="file" name="firma" accept="image/*">
+                        </label>
+                        <label>Comprobante fotográfico
+                            <input type="file" name="comprobante" accept="image/*">
+                        </label>
+                    </div>
+                    <p class="muted small">Adjunta al menos uno de los dos como evidencia.</p>
+                    <button class="btn btn-solid" type="submit">Confirmar entrega</button>
+                </form>
+            </details>
+        {% endif %}
+    </article>
+    {% empty %}
+    <p class="empty">Todavía no hay despachos registrados.</p>
+    {% endfor %}
 </section>
 {% endblock %}

@@ -1,6 +1,9 @@
 """
 Datos de prueba para Dulce Arte.
 Uso:  python seed_data.py
+
+Crea usuarios por rol, insumos, catálogo con recetas, clientes (uno con cuenta),
+y pedidos que recorren el flujo real (pago → confirmado → producción → entrega).
 """
 
 import os
@@ -17,9 +20,11 @@ from django.utils import timezone  # noqa: E402
 
 from api.models import (  # noqa: E402
     CategoriaInsumo,
+    CategoriaProducto,
     Cliente,
-    HistorialEstado,
+    Despacho,
     Insumo,
+    Pago,
     Pedido,
     PedidoDetalle,
     Perfil,
@@ -28,6 +33,7 @@ from api.models import (  # noqa: E402
 )
 
 CLAVE = "Dulce2026!"
+CLAVE_CLIENTE = "Cliente2026!"
 
 USUARIOS = [
     ("admin", "Administrador", "Dulce Arte", "admin"),
@@ -36,6 +42,12 @@ USUARIOS = [
     ("calidad", "Control", "de Calidad", "calidad"),
     ("despacho", "Repartidor", "Zona Centro", "despacho"),
 ]
+
+CATEGORIAS_PRODUCTO = {
+    "Tortas": "Tortas completas para cumpleaños y celebraciones.",
+    "Postres": "Cheesecakes, cupcakes y piezas individuales.",
+    "Mesas dulces": "Surtidos para eventos y reuniones.",
+}
 
 
 def crear_usuarios():
@@ -91,10 +103,18 @@ def crear_insumos():
 
 
 def crear_productos(insumos):
+    categorias = {
+        nombre: CategoriaProducto.objects.get_or_create(
+            nombre=nombre, defaults={"descripcion": descripcion}
+        )[0]
+        for nombre, descripcion in CATEGORIAS_PRODUCTO.items()
+    }
+
     recetas = {
         "Torta de chocolate": {
             "precio": "18990",
             "porciones": 12,
+            "categoria": "Tortas",
             "descripcion": "Bizcocho húmedo de chocolate con ganache y decoración personalizada.",
             "bom": [
                 ("Harina sin polvos", "500"),
@@ -108,6 +128,7 @@ def crear_productos(insumos):
         "Cheesecake de frutilla": {
             "precio": "15990",
             "porciones": 10,
+            "categoria": "Postres",
             "descripcion": "Base de galleta, crema de queso y cubierta de frutillas frescas.",
             "bom": [
                 ("Harina sin polvos", "250"),
@@ -121,6 +142,7 @@ def crear_productos(insumos):
         "Torta de manjar": {
             "precio": "17990",
             "porciones": 12,
+            "categoria": "Tortas",
             "descripcion": "Bizcocho clásico relleno de manjar y crema chantilly.",
             "bom": [
                 ("Harina sin polvos", "450"),
@@ -128,6 +150,33 @@ def crear_productos(insumos):
                 ("Huevos", "7"),
                 ("Manjar", "500"),
                 ("Crema para batir", "400"),
+                ("Caja para torta", "1"),
+            ],
+        },
+        "Torta de zanahoria": {
+            "precio": "14990",
+            "porciones": 10,
+            "categoria": "Tortas",
+            "descripcion": "Bizcocho especiado de zanahoria con frosting de queso crema.",
+            "bom": [
+                ("Harina sin polvos", "400"),
+                ("Azúcar", "300"),
+                ("Huevos", "6"),
+                ("Mantequilla", "200"),
+                ("Caja para torta", "1"),
+            ],
+        },
+        "Caja de cupcakes": {
+            "precio": "12990",
+            "porciones": 12,
+            "categoria": "Mesas dulces",
+            "descripcion": "Doce cupcakes surtidos con buttercream y decoración temática.",
+            "bom": [
+                ("Harina sin polvos", "300"),
+                ("Azúcar", "250"),
+                ("Huevos", "5"),
+                ("Mantequilla", "200"),
+                ("Crema para batir", "300"),
                 ("Caja para torta", "1"),
             ],
         },
@@ -141,8 +190,12 @@ def crear_productos(insumos):
                 "precio_base": Decimal(datos["precio"]),
                 "porciones": datos["porciones"],
                 "descripcion": datos["descripcion"],
+                "categoria": categorias[datos["categoria"]],
             },
         )
+        if producto.categoria_id is None:
+            producto.categoria = categorias[datos["categoria"]]
+            producto.save(update_fields=["categoria"])
         for insumo_nombre, cantidad in datos["bom"]:
             RecetaInsumo.objects.get_or_create(
                 producto=producto,
@@ -170,50 +223,115 @@ def crear_clientes():
     return clientes
 
 
+def crear_cuenta_cliente(clientes):
+    """Vincula a María con una cuenta real de la tienda."""
+    user, creado = User.objects.get_or_create(
+        username="cliente",
+        defaults={
+            "first_name": "María",
+            "last_name": "Fernández",
+            "email": "maria@correo.cl",
+        },
+    )
+    if creado:
+        user.set_password(CLAVE_CLIENTE)
+        user.save()
+    Perfil.objects.get_or_create(
+        user=user, defaults={"rol": "cliente", "telefono": "+56912345678"}
+    )
+
+    cliente = clientes[0]
+    if cliente.user_id is None:
+        cliente.user = user
+        cliente.save(update_fields=["user"])
+    return cliente
+
+
+def _crear_pago(pedido, monto, metodo="transferencia", tipo="anticipo"):
+    Pago.objects.get_or_create(
+        pedido=pedido,
+        monto=Decimal(monto),
+        defaults={"metodo": metodo, "tipo": tipo, "referencia": "Seed"},
+    )
+
+
 def crear_pedidos(clientes, productos):
     ahora = timezone.now()
-    admin = User.objects.filter(username="admin").first()
-    cocina = User.objects.filter(username="cocina").first()
-    ventas = User.objects.filter(username="ventas").first()
+    admin = User.objects.get(username="admin")
+    cocina = User.objects.get(username="cocina")
+    ventas = User.objects.get(username="ventas")
+    despacho_user = User.objects.get(username="despacho")
 
+    # (cliente, estado objetivo, días, modalidad, producto, cantidad, diseño, pago)
     plantilla = [
-        (clientes[0], "recibido", 3, "Torta de chocolate", 1, "Temática unicornio, tonos pastel."),
-        (clientes[1], "preparacion", 2, "Cheesecake de frutilla", 2, "Decoración con frutillas naturales."),
-        (clientes[2], "horneado", 1, "Torta de manjar", 3, "Logo del colegio en la superficie."),
-        (clientes[3], "listo", 0, "Torta de chocolate", 1, "Dedicatoria 'Feliz cumpleaños, Ana'."),
+        (clientes[0], "recibido", 3, "retiro", "Torta de chocolate", 1,
+         "Temática unicornio, tonos pastel.", "0"),
+        (clientes[1], "preparacion", 2, "despacho", "Cheesecake de frutilla", 2,
+         "Decoración con frutillas naturales.", "5000"),
+        (clientes[2], "horneado", 1, "despacho", "Torta de manjar", 3,
+         "Logo del colegio en la superficie.", "10000"),
+        (clientes[3], "listo", 1, "despacho", "Torta de chocolate", 1,
+         "Dedicatoria 'Feliz cumpleaños, Ana'.", "18990"),
+        (clientes[0], "entregado", -5, "retiro", "Torta de zanahoria", 1,
+         "Entrega pasada para historial.", "14990"),
     ]
 
-    for cliente, estado, dias, producto, cantidad, diseno in plantilla:
+    ruta = ["confirmado", "preparacion", "horneado", "calidad", "listo", "entregado"]
+
+    for cliente, objetivo, dias, modalidad, producto, cantidad, diseno, pago in plantilla:
         if Pedido.objects.filter(cliente=cliente, descripcion_diseno=diseno).exists():
             continue
 
         pedido = Pedido.objects.create(
             cliente=cliente,
-            estado=estado,
+            canal="web" if cliente.user_id else "mostrador",
+            modalidad=modalidad,
             fecha_entrega=ahora + timedelta(days=dias, hours=2),
+            direccion_entrega=cliente.direccion if modalidad == "despacho" else "",
+            telefono_contacto=cliente.telefono,
             descripcion_diseno=diseno,
-            anticipo=Decimal("5000"),
-            costo_despacho=Decimal("3000"),
+            costo_despacho=Decimal("3500") if modalidad == "despacho" else Decimal("0"),
             creado_por=ventas,
-            insumos_descontados=False,
         )
         PedidoDetalle.objects.create(
             pedido=pedido, producto=productos[producto], cantidad=cantidad
         )
-        HistorialEstado.objects.create(
-            pedido=pedido,
-            estado_anterior="",
-            estado_nuevo="recibido",
-            usuario=ventas,
-            comentario="Pedido registrado en ventas.",
-        )
-        if estado != "recibido":
-            HistorialEstado.objects.create(
+
+        if Decimal(pago) > 0:
+            _crear_pago(
+                pedido,
+                pago,
+                tipo="completo" if Decimal(pago) >= pedido.total else "anticipo",
+            )
+
+        if objetivo != "recibido":
+            # Recorre el flujo real para que historial, stock y fechas sean coherentes.
+            for estado in ruta:
+                if estado == "entregado" and modalidad == "despacho":
+                    Despacho.objects.get_or_create(
+                        pedido=pedido,
+                        defaults={
+                            "direccion": pedido.direccion_entrega,
+                            "repartidor": despacho_user,
+                            "fecha_salida": ahora - timedelta(days=abs(dias) + 1),
+                        },
+                    )
+                if estado == "entregado" and modalidad == "retiro":
+                    pedido.retirado_por = cliente.nombre
+                    pedido.save(update_fields=["retirado_por"])
+                usuario = cocina if estado in ("preparacion", "horneado") else admin
+                pedido.cambiar_estado(estado, usuario=usuario, comentario="Seed")
+                if estado == objetivo:
+                    break
+
+        # Un pedido queda en reparto para mostrar el tablero de despachos.
+        if objetivo == "listo" and modalidad == "despacho":
+            Despacho.objects.get_or_create(
                 pedido=pedido,
-                estado_anterior="recibido",
-                estado_nuevo=estado,
-                usuario=cocina if estado in ("preparacion", "horneado") else admin,
-                comentario="Avance de producción.",
+                defaults={
+                    "direccion": pedido.direccion_entrega,
+                    "repartidor": despacho_user,
+                },
             )
 
 
@@ -222,10 +340,12 @@ def main():
     insumos = crear_insumos()
     productos = crear_productos(insumos)
     clientes = crear_clientes()
+    crear_cuenta_cliente(clientes)
     crear_pedidos(clientes, productos)
 
     print("Datos de prueba cargados.")
-    print(f"Usuarios: {', '.join(u for u, *_ in USUARIOS)} — clave: {CLAVE}")
+    print(f"Usuarios internos: {', '.join(u for u, *_ in USUARIOS)} — clave: {CLAVE}")
+    print(f"Cliente demo: cliente — clave: {CLAVE_CLIENTE}")
     print(f"Insumos: {Insumo.objects.count()} | Productos: {Producto.objects.count()}")
     print(f"Clientes: {Cliente.objects.count()} | Pedidos: {Pedido.objects.count()}")
 

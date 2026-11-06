@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Crear cuenta{% endblock %}
+
+{% block content %}
+<section class="login-wrap">
+    <div class="login-aside">
+        <p class="hero-role">Cuenta de cliente</p>
+        <h1>Tu historial,<br>en un solo lugar.</h1>
+        <p>Guarda tus datos de entrega, revisa tus pedidos y sigue el avance de
+        cada torta sin llamar a la tienda.</p>
+        <ul class="login-list">
+            <li>Checkout más rápido con tus datos guardados.</li>
+            <li>Historial de pedidos y estados de pago.</li>
+            <li>Seguimiento por código o enlace.</li>
+        </ul>
+    </div>
+
+    <div class="login-card">
+        <h2>Crear cuenta</h2>
+        <p class="muted">Solo necesitamos tus datos de contacto.</p>
+
+        <form method="post" class="form">
+            {% csrf_token %}
+            <div class="form-row">
+                <label>Nombre
+                    {{ form.nombre }}
+                    {% if form.nombre.errors %}<span class="field-error">{{ form.nombre.errors|striptags }}</span>{% endif %}
+                </label>
+                <label>Apellido
+                    {{ form.apellido }}
+                    {% if form.apellido.errors %}<span class="field-error">{{ form.apellido.errors|striptags }}</span>{% endif %}
+                </label>
+            </div>
+            <label>Usuario
+                {{ form.username }}
+                {% if form.username.errors %}<span class="field-error">{{ form.username.errors|striptags }}</span>{% endif %}
+            </label>
+            <label>Correo
+                {{ form.email }}
+                {% if form.email.errors %}<span class="field-error">{{ form.email.errors|striptags }}</span>{% endif %}
+            </label>
+            <label>Teléfono
+                {{ form.telefono }}
+                {% if form.telefono.errors %}<span class="field-error">{{ form.telefono.errors|striptags }}</span>{% endif %}
+            </label>
+            <div class="form-row">
+                <label>Contraseña
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}<span class="field-error">{{ form.password1.errors|striptags }}</span>{% endif %}
+                </label>
+                <label>Repetir contraseña
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}<span class="field-error">{{ form.password2.errors|striptags }}</span>{% endif %}
+                </label>
+            </div>
+
+            <button class="btn btn-solid btn-block" type="submit">Crear mi cuenta</button>
+            <p class="muted small center">¿Ya tienes cuenta? <a href="{% url 'login' %}">Ingresa aquí</a></p>
+        </form>
+    </div>
+</section>
+{% endblock %}

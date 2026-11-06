@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load static %}
 {% block title %}Tablero de cocina{% endblock %}
 
 {% block content %}
@@ -7,7 +6,13 @@
     <div>
         <p class="panel-role">Producción</p>
         <h1>Tablero de cocina</h1>
-        <p class="lede">Avanza cada pedido por el flujo. Al pasar a <em>En preparación</em> se descuentan los insumos de la receta.</p>
+        <p class="lede">
+            Avanza cada pedido por el flujo. Al pasar a <em>En preparación</em> se
+            descuentan los insumos de la receta; al cancelar se reponen.
+        </p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-ghost" href="{% url 'pedidos' %}">Ver listado</a>
     </div>
 </section>
 
@@ -33,11 +38,16 @@
 
             <div class="kanban-actions">
                 {% for clave, etiqueta in pedido.transiciones_disponibles %}
-                    <button class="btn btn-mini {% if clave == 'cancelado' %}btn-danger{% else %}btn-solid{% endif %}"
-                            data-cambiar="{{ pedido.pk }}"
-                            data-estado="{{ clave }}">
-                        {{ etiqueta }}
-                    </button>
+                    <form method="post" action="{% url 'pedido_cambiar_estado' pedido.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="estado" value="{{ clave }}">
+                        <input type="hidden" name="next" value="{% url 'kanban' %}">
+                        <button class="btn btn-mini {% if clave == 'cancelado' %}btn-danger{% else %}btn-solid{% endif %}"
+                                type="submit"
+                                {% if clave == 'cancelado' %}onclick="return confirm('¿Cancelar el pedido {{ pedido.codigo }}? Se repondrán los insumos descontados.');"{% endif %}>
+                            {{ etiqueta }}
+                        </button>
+                    </form>
                 {% endfor %}
             </div>
         </article>
@@ -47,8 +57,4 @@
     </section>
     {% endfor %}
 </div>
-{% endblock %}
-
-{% block scripts %}
-<script src="{% static 'js/kanban.js' %}"></script>
 {% endblock %}

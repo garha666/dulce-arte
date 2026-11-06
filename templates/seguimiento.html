@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Seguimiento de pedido{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Seguimiento</p>
+        <h1>¿Cómo va mi pedido?</h1>
+        <p class="lede">Ingresa el código que te entregamos al confirmar la compra.</p>
+    </div>
+</section>
+
+<section class="panel">
+    <form method="get" action="{% url 'seguimiento' %}" class="form-inline">
+        <label class="grow">Código o enlace de seguimiento
+            {{ form.codigo }}
+        </label>
+        <button class="btn btn-solid" type="submit">Buscar pedido</button>
+    </form>
+    {% if form.codigo.errors %}
+        <p class="field-error">{{ form.codigo.errors|striptags }}</p>
+    {% endif %}
+</section>
+
+{% if pedido %}
+<section class="grid-2 mt">
+    <div class="panel">
+        <div class="panel-title">
+            <div>
+                <p class="panel-role">Pedido</p>
+                <h2>{{ pedido.codigo }}</h2>
+            </div>
+            <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+        </div>
+
+        <dl class="detail-list">
+            {% if mostrar_contacto %}
+                <div><dt>Cliente</dt><dd>{{ pedido.cliente.nombre }}</dd></div>
+            {% endif %}
+            <div><dt>Entrega</dt><dd>{{ pedido.fecha_entrega|date:"l d/m/Y H:i" }}</dd></div>
+            <div><dt>Modalidad</dt><dd>{{ pedido.get_modalidad_display }}</dd></div>
+            {% if pedido.modalidad == 'despacho' and mostrar_contacto %}
+                <div><dt>Dirección</dt><dd>{{ pedido.direccion_entrega }}</dd></div>
+            {% endif %}
+            <div><dt>Pago</dt>
+                <dd>
+                    <span class="badge {% if pedido.estado_pago == 'pagado' %}badge-ok{% elif pedido.estado_pago == 'parcial' %}badge-warn{% else %}badge-danger{% endif %}">
+                        {{ pedido.estado_pago_display }}
+                    </span>
+                </dd>
+            </div>
+        </dl>
+
+        <h3 class="section-sub">Productos</h3>
+        <table class="table">
+            <thead><tr><th>Producto</th><th>Cant.</th><th>Subtotal</th></tr></thead>
+            <tbody>
+                {% for detalle in pedido.detalles.all %}
+                <tr>
+                    <td>{{ detalle.producto.nombre }}
+                        {% if detalle.personalizacion %}<br><small class="muted">{{ detalle.personalizacion }}</small>{% endif %}
+                    </td>
+                    <td>{{ detalle.cantidad }}</td>
+                    <td>${{ detalle.subtotal|floatformat:0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <dl class="totales">
+            <dt>Total</dt><dd>${{ pedido.total|floatformat:0 }}</dd>
+            <dt>Pagado</dt><dd>${{ pedido.total_pagado|floatformat:0 }}</dd>
+            <dt>Saldo</dt><dd>${{ pedido.saldo|floatformat:0 }}</dd>
+        </dl>
+    </div>
+
+    <div class="panel">
+        <h2>Avance</h2>
+        <ul class="timeline">
+            {% for evento in pedido.historial.all %}
+            <li>
+                <strong>{{ evento.get_estado_nuevo_display }}</strong>
+                <span class="muted">{{ evento.fecha|date:"d/m/Y H:i" }}</span>
+                {% if evento.comentario %}<p class="muted small">{{ evento.comentario }}</p>{% endif %}
+            </li>
+            {% empty %}
+                <li class="muted">El pedido aún no tiene movimientos registrados.</li>
+            {% endfor %}
+        </ul>
+
+        {% if pedido.modalidad == 'despacho' and pedido.despacho %}
+        <h3 class="section-sub">Despacho</h3>
+        <p class="muted small">
+            {% if pedido.despacho.fecha_salida %}
+                Salió a reparto el {{ pedido.despacho.fecha_salida|date:"d/m/Y H:i" }}.
+            {% else %}
+                Aún no sale a reparto.
+            {% endif %}
+            {% if pedido.despacho.confirmado %}
+                Entrega confirmada con {{ pedido.despacho.receptor_nombre|default:"receptor registrado" }}.
+            {% endif %}
+        </p>
+        {% endif %}
+
+        <div class="info-box mt">
+            <p class="muted small">
+                Guarda este enlace para volver a consultar:
+                <a href="{% url 'seguimiento_detalle' pedido.token_seguimiento %}">seguimiento/{{ pedido.token_seguimiento }}</a>
+            </p>
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

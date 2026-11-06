@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Tienda{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Tienda</p>
+        <h1>Catálogo</h1>
+        <p class="lede">
+            Todo se hornea a pedido. Reserva con 48 horas de anticipación,
+            elige retiro en tienda o despacho a domicilio.
+        </p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-ghost" href="{% url 'seguimiento' %}">Seguir un pedido</a>
+        <a class="btn btn-solid" href="{% url 'carrito' %}">
+            Carrito · {{ carrito_unidades }} · ${{ carrito_total|floatformat:0 }}
+        </a>
+    </div>
+</section>
+
+<section class="filters" aria-label="Filtrar por categoría">
+    <a class="chip {% if not categoria_actual %}is-active{% endif %}" href="{% url 'tienda' %}">Todo</a>
+    {% for categoria in categorias %}
+        <a class="chip {% if categoria_actual == categoria.nombre %}is-active{% endif %}"
+           href="?categoria={{ categoria.nombre|urlencode }}">
+            {{ categoria.nombre }} <span class="chip-count">{{ categoria.total }}</span>
+        </a>
+    {% endfor %}
+</section>
+
+<section class="product-grid">
+    {% for producto in productos %}
+    <article class="product product-card">
+        <a class="product-media" href="{% url 'producto_detalle' producto.pk %}" aria-hidden="true" tabindex="-1">
+            {% if producto.imagen %}
+                <img src="{{ producto.imagen.url }}" alt="{{ producto.nombre }}">
+            {% else %}
+                <span class="product-media-placeholder">{{ producto.nombre|first }}</span>
+            {% endif %}
+        </a>
+
+        <div class="product-head">
+            <h3><a href="{% url 'producto_detalle' producto.pk %}">{{ producto.nombre }}</a></h3>
+            <span class="product-price">${{ producto.precio_base|floatformat:0 }}</span>
+        </div>
+
+        <p>{{ producto.descripcion|default:"Preparado a pedido con ingredientes frescos."|truncatechars:120 }}</p>
+
+        <p class="product-meta">
+            {{ producto.porciones }} porciones
+            {% if producto.categoria %}· {{ producto.categoria.nombre }}{% endif %}
+        </p>
+
+        <p class="product-meta">
+            {% if producto.unidades_disponibles is None %}
+                <span class="badge badge-ok">Disponible</span>
+            {% elif producto.disponible %}
+                <span class="badge badge-ok">{{ producto.unidades_disponibles }} disponibles hoy</span>
+            {% else %}
+                <span class="badge badge-danger">Sin stock</span>
+            {% endif %}
+        </p>
+
+        <div class="product-actions">
+            {% if producto.disponible %}
+            <form method="post" action="{% url 'carrito_agregar' producto.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{% url 'tienda' %}">
+                <button class="btn btn-solid btn-mini" type="submit">Agregar al carrito</button>
+            </form>
+            {% endif %}
+            <a class="link" href="{% url 'producto_detalle' producto.pk %}">Ver detalle</a>
+        </div>
+    </article>
+    {% empty %}
+    <div class="panel">
+        <p class="empty">No hay productos disponibles en esta categoría.</p>
+        <a class="link" href="{% url 'tienda' %}">Ver todo el catálogo</a>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}
