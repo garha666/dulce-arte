@@ -12,7 +12,7 @@ páginas Django server-side.
 - Repositorio: <https://github.com/garha666/dulce-arte>
 - Sección: IEC-N4-C1
 - Docente: Marcelo Alvarado Aravena
-- IP pública AWS EC2: _(completar al desplegar)_
+- IP pública AWS EC2: <http://23.23.34.184/> (Elastic IP, `us-east-1`)
 
 ## Stack
 
@@ -218,6 +218,16 @@ rollback.
 Ver [`deploy/README-despliegue.md`](deploy/README-despliegue.md): Postgres en la instancia,
 Gunicorn con socket Unix, Nginx como proxy inverso y estáticos servidos por Nginx.
 También hay un script idempotente: `bash deploy/instalar.sh`.
+
+### Estado del despliegue (11-11-2026)
+
+- Instancia `i-04ad1331475c6def0` — `t3.micro`, Ubuntu Server 22.04 LTS, `us-east-1`.
+- Elastic IP `23.23.34.184` → <http://23.23.34.184/>.
+- PostgreSQL 16 local en la instancia; `gunicorn`, `nginx` y `postgresql` activos.
+- Desplegado con `SEED_DEMO_DATA=true` (datos de demostración cargados).
+- Verificado: `/` 200, `/tienda/` 200, `/login/` 200, `/admin/` 302, `/mostrador/` 302 y
+  `/api/` 403 sin sesión; login de `admin` y páginas internas (`/pedidos/`, `/kanban/`,
+  `/inventario/`, `/equipo/`, `/mostrador/`, `/despachos/`) en 200.
 
 Antes de publicar la instancia:
 

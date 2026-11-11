@@ -26,6 +26,8 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas.
 - **63 pruebas** en `api/tests.py`; `manage.py check` OK; `smoke_test.py` cubre `/health/`,
   `/equipo/` y `/mostrador/`. Migración `0004` agrega `Pedido.venta_directa`.
 - PostgreSQL 16 en Docker (`localhost:5433`); sin Docker, usar `DB_ENGINE=sqlite` para pruebas.
+- **Desplegado en AWS EC2** (11-11-2026): `i-04ad1331475c6def0` (t3.micro, Ubuntu 22.04,
+  us-east-1), Elastic IP `23.23.34.184`, PostgreSQL local, Gunicorn + Nginx y seed demo cargado.
 
 ## Decisiones (y por qué)
 - API solo administración: el panel HTML cubre la operación y evita duplicar reglas.
@@ -50,6 +52,7 @@ Memoria del proyecto entre sesiones. Máximo ~50 líneas.
   página debe tener al menos una prueba de 200 por rol (pasó con `puede_editar`).
 
 ## Pendientes
-- Completar la IP pública en `README.md`, desplegar en EC2 y configurar HTTPS.
+- Configurar HTTPS (Nginx + certificado) y restringir el puerto 22 a una IP fija; cambiar las
+  claves demo antes de exponer la instancia.
 - Reemplazar las fotos demo por fotografías propias antes de publicar.
 - Opcional: impedir pagos que superen el saldo y notificar al cliente por correo.
