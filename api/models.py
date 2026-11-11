@@ -354,7 +354,7 @@ class Pedido(models.Model):
             "preparacion": ("admin", "calidad", "cocina"),
         },
         "listo": {
-            "despachado": ("admin", "despacho"),
+            "despachado": ("admin", "despacho", "ventas"),
             "entregado": ("admin", "despacho", "ventas"),
             "cancelado": ("admin", "ventas"),
         },
@@ -406,6 +406,13 @@ class Pedido(models.Model):
     observaciones = models.TextField(blank=True)
     retirado_por = models.CharField(max_length=120, blank=True)
     insumos_descontados = models.BooleanField(default=False)
+    venta_directa = models.BooleanField(
+        default=False,
+        help_text=(
+            "Venta inmediata de mostrador: descuenta insumos al registrarse y no "
+            "ocupa cupo de la agenda."
+        ),
+    )
     confirmado_en = models.DateTimeField(null=True, blank=True)
     confirmado_por = models.ForeignKey(
         User,
@@ -457,6 +464,10 @@ class Pedido(models.Model):
                 {"direccion_entrega": "Un pedido con despacho necesita dirección."}
             )
 
+        # Una venta de mostrador ocurre ahora: no reserva agenda ni cupo.
+        if self.venta_directa:
+            return
+
         self.validar_agenda(
             self.fecha_entrega,
             exigir_anticipacion=self.canal == "web",
@@ -484,6 +495,7 @@ class Pedido(models.Model):
             )
 
         agendados = cls.objects.filter(
+            venta_directa=False,
             fecha_entrega__gte=local.replace(hour=0, minute=0, second=0, microsecond=0),
             fecha_entrega__lt=local.replace(
                 hour=0, minute=0, second=0, microsecond=0
@@ -550,6 +562,7 @@ class Pedido(models.Model):
             (estado, dict(self.ESTADOS)[estado])
             for estado in self.TRANSICIONES.get(self.estado, [])
             if rol in permitidas.get(estado, ())
+            and not (estado == "despachado" and self.modalidad != "despacho")
         ]
 
     @transaction.atomic
@@ -620,12 +633,29 @@ class Pedido(models.Model):
         self.save(update_fields=["insumos_descontados"])
 
     @transaction.atomic
-    def cambiar_estado(self, nuevo_estado, usuario=None, comentario=""):
-        """Mueve el pedido por el flujo validando reglas de negocio."""
+    def cambiar_estado(
+        self, nuevo_estado, usuario=None, comentario="", *, venta_directa=False
+    ):
+        """Mueve el pedido por el flujo validando reglas de negocio.
+
+        `venta_directa=True` habilita la ruta express de una venta de mostrador:
+        desde `recibido` el pedido puede cerrarse como `entregado` (el cliente se
+        lo lleva) o `despachado` (sale a delivery), descontando insumos una vez.
+        """
         if nuevo_estado == self.estado:
             raise ValidationError("El pedido ya se encuentra en ese estado.")
 
-        if nuevo_estado not in self.TRANSICIONES.get(self.estado, []):
+        venta_inmediata = (
+            venta_directa
+            and self.venta_directa
+            and self.estado == "recibido"
+            and nuevo_estado in {"despachado", "entregado"}
+        )
+
+        if (
+            nuevo_estado not in self.TRANSICIONES.get(self.estado, [])
+            and not venta_inmediata
+        ):
             raise ValidationError(
                 f"Transición no permitida: {self.get_estado_display()} → "
                 f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}."
@@ -634,17 +664,24 @@ class Pedido(models.Model):
         if usuario is not None:
             from .roles import rol_de
 
-            roles_permitidos = self.TRANSICIONES_ROL.get(self.estado, {}).get(
-                nuevo_estado
-            )
             rol = rol_de(usuario)
-            if roles_permitidos is not None and rol not in roles_permitidos:
-                raise ValidationError(
-                    "Tu rol no puede mover el pedido de "
-                    f"{self.get_estado_display()} a "
-                    f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}. "
-                    "Esta acción corresponde a otro equipo."
+            if venta_inmediata:
+                if rol not in ("admin", "ventas"):
+                    raise ValidationError(
+                        "Solo ventas o administración pueden cerrar una venta de "
+                        "mostrador."
+                    )
+            else:
+                roles_permitidos = self.TRANSICIONES_ROL.get(self.estado, {}).get(
+                    nuevo_estado
                 )
+                if roles_permitidos is not None and rol not in roles_permitidos:
+                    raise ValidationError(
+                        "Tu rol no puede mover el pedido de "
+                        f"{self.get_estado_display()} a "
+                        f"{dict(self.ESTADOS).get(nuevo_estado, nuevo_estado)}. "
+                        "Esta acción corresponde a otro equipo."
+                    )
 
         if nuevo_estado == "confirmado":
             if self.estado_pago == "pendiente":
@@ -661,6 +698,20 @@ class Pedido(models.Model):
         if nuevo_estado in {"despachado", "entregado"}:
             despacho = Despacho.objects.filter(pedido=self).first()
             if self.modalidad == "despacho":
+                if not despacho and nuevo_estado == "despachado":
+                    if not (self.direccion_entrega or "").strip():
+                        raise ValidationError(
+                            "Un pedido con despacho necesita una dirección de "
+                            "entrega."
+                        )
+                    despacho = Despacho.objects.create(
+                        pedido=self,
+                        direccion=self.direccion_entrega,
+                        fecha_salida=timezone.now(),
+                        observaciones=(
+                            "Ruta creada al marcar el pedido como despachado."
+                        ),
+                    )
                 if not despacho:
                     raise ValidationError(
                         "Asigna un despacho antes de mover el pedido a reparto."
@@ -678,7 +729,7 @@ class Pedido(models.Model):
                     "Registra quién retira el pedido antes de cerrarlo."
                 )
 
-        if nuevo_estado == "preparacion":
+        if nuevo_estado == "preparacion" or venta_inmediata:
             self.descontar_insumos(usuario)
 
         if nuevo_estado == "cancelado":
@@ -883,7 +934,7 @@ class Despacho(models.Model):
                 raise ValidationError("Debes indicar quién recibe la entrega.")
 
         if self._state.adding and self.pedido_id:
-            if self.pedido.estado != "listo":
+            if self.pedido.estado != "listo" and not self.pedido.venta_directa:
                 raise ValidationError(
                     "Solo se puede crear un despacho para un pedido en estado Listo."
                 )

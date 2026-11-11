@@ -292,9 +292,10 @@ class PedidoAdmin(admin.ModelAdmin):
         "fecha_entrega",
         "total_pedido",
         "saldo_pedido",
+        "venta_directa",
         "insumos_descontados",
     )
-    list_filter = ("estado", "canal", "modalidad", "insumos_descontados", "fecha_entrega")
+    list_filter = ("estado", "canal", "modalidad", "venta_directa", "insumos_descontados", "fecha_entrega")
     search_fields = ("codigo", "cliente__nombre", "descripcion_diseno", "token_seguimiento")
     date_hierarchy = "fecha_entrega"
     readonly_fields = (
@@ -306,6 +307,7 @@ class PedidoAdmin(admin.ModelAdmin):
         "total_pedido",
         "saldo_pedido",
         "estado_pago",
+        "venta_directa",
     )
     inlines = [PedidoDetalleInline, HistorialEstadoInline]
     list_select_related = ("cliente",)
@@ -321,6 +323,7 @@ class PedidoAdmin(admin.ModelAdmin):
                     "token_seguimiento",
                     "cliente",
                     "canal",
+                    "venta_directa",
                     "estado",
                     "creado_por",
                     "confirmado_por",

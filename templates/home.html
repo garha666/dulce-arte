@@ -13,7 +13,8 @@
     </div>
     <div class="panel-head-actions">
         {% if rol == 'admin' or rol == 'ventas' %}
-            <a class="btn btn-solid" href="{% url 'pedidos' %}">Registrar pedido</a>
+            <a class="btn btn-solid" href="{% url 'mostrador' %}">Vender en mostrador</a>
+            <a class="btn btn-ghost" href="{% url 'pedidos' %}">Registrar pedido</a>
         {% endif %}
         {% if rol == 'admin' or rol == 'cocina' or rol == 'calidad' %}
             <a class="btn btn-ghost" href="{% url 'kanban' %}">Abrir cocina</a>

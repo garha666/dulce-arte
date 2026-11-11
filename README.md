@@ -31,7 +31,10 @@ páginas Django server-side.
    sesión, checkout con retiro o despacho, seguimiento público y cuenta de cliente.
 2. **Agenda real**: 48 horas de anticipación para pedidos web, horario 09:00–18:59 de Santiago y
    cupo diario de 6 pedidos; el mostrador puede agendar sin anticipación pero respeta horario y cupo.
-3. **Pagos**: registro de abonos por efectivo, transferencia o tarjeta; `estado_pago` y `saldo` se
+3. **Venta directa de mostrador**: pantalla `/mostrador/` para buscar productos de vitrina con su
+   stock, elegir o crear cliente, cobrar y cerrar la venta; descuenta los insumos del BOM al
+   confirmar y no ocupa cupo de la agenda.
+4. **Pagos**: registro de abonos por efectivo, transferencia o tarjeta; `estado_pago` y `saldo` se
    calculan desde los pagos y ningún pedido entra a producción sin pago registrado.
 4. **Tablero Kanban de cocina**: Recibido → Confirmado → En preparación → Horneado/Decorado →
    Control de calidad → Listo → Despachado → Entregado, con historial y transiciones validadas.
@@ -58,6 +61,7 @@ dulce-arte/
 ├── api/                  # app única: dominio, tienda, panel y API
 │   ├── models.py         # dominio en 3FN + agenda, pagos y reglas de negocio
 │   ├── carrito.py        # carrito en sesión con precios frescos
+│   ├── mostrador.py      # venta directa de mostrador en sesión
 │   ├── forms.py          # formularios de tienda y panel interno
 │   ├── views.py          # tienda, cuenta, panel, acciones y ViewSets
 │   ├── serializers.py
@@ -121,7 +125,7 @@ en `/login/` y el Admin de Django en `/admin/`.
 | Rol | Qué hace | Qué no puede hacer |
 |---|---|---|
 | Administrador | Configura catálogo, equipo, pagos y toda la operación | Entregar sin evidencia o editar pedidos con BOM descontado |
-| Ventas | Registra pedidos, cobra anticipos, confirma y cancela | Iniciar producción, despachar o crear rutas |
+| Ventas | Vende en mostrador, registra pedidos, cobra anticipos, confirma, cancela y marca retiros o deliveries | Iniciar producción o confirmar entregas a domicilio con evidencia |
 | Cocina | Inicia preparación, hornea y envía a calidad | Confirmar pagos, cancelar o entregar |
 | Calidad | Aprueba el paso a Listo o devuelve a preparación | Producir, cobrar o despachar |
 | Despacho | Crea rutas, entrega con evidencia y registra retiros | Confirmar pedidos o modificar producción |
@@ -145,6 +149,8 @@ La guía completa (atributos, responsabilidades, permisos y transiciones reales)
 | `/pedidos/` | Listado, alta de mostrador y filtros | admin, ventas, cocina, calidad, despacho |
 | `/pedidos/<id>/` | Detalle, pagos y transiciones según rol | Dueño o personal interno |
 | `/pedidos/<id>/editar/` | Corregir cabecera y productos antes del BOM | admin, ventas |
+| `/pedidos/<id>/retiro/` | Cerrar un retiro con el nombre de quien retira | admin, ventas, despacho |
+| `/mostrador/` | Vitrina, venta en sesión, cliente y cobro inmediato | admin, ventas |
 | `/kanban/` | Tablero de producción | admin, cocina, calidad |
 | `/inventario/` | Stock de insumos y recetas (BOM) | admin, cocina, calidad |
 | `/equipo/` | Guía de roles, alta de equipo y clientes | admin |
@@ -181,7 +187,11 @@ autenticado sin rol `admin` recibe **403** y un visitante **401/403**.
 - Descuento de insumos **atómico** y **una sola vez** (`select_for_update` + bandera).
 - Cancelación con insumos descontados → movimientos de entrada que reponen el stock.
 - Agenda: 48 h para pedidos web, 09:00–18:59 en `America/Santiago` y cupo de 6 por día; el cupo
-  se cuenta con rango de fecha local para no desplazarse por UTC.
+  se cuenta con rango de fecha local para no desplazarse por UTC y excluye ventas directas.
+- Venta de mostrador: `venta_directa=True` permite `recibido → entregado` (retiro) o
+  `recibido → despachado` (delivery) solo para admin/ventas; descuenta insumos al cerrar.
+- Ventas puede marcar un pedido `listo` como `despachado`; si no existe ruta, se crea el
+  `Despacho` con la dirección del pedido y la hora de salida.
 - Despacho a domicilio exige dirección; retiro no tiene costo y el despacho cuesta $3.500.
 - Crear ruta → pedido `despachado`; confirmar con receptor y firma/comprobante → `entregado`.
 - Retiro → `entregado` solo con `retirado_por` registrado.
@@ -197,9 +207,9 @@ python manage.py test api
 python smoke_test.py
 ```
 
-Resultado esperado: `manage.py check` sin errores, **54 pruebas OK** en `api/tests.py` (flujo,
-pagos, agenda, despacho, tienda, cuenta, permisos por rol, equipo, edición de pedidos, imágenes,
-health, API admin-only, BOM y frontend) y `smoke_test.py` con todas las páginas en 200, 403 para
+Resultado esperado: `manage.py check` sin errores, **63 pruebas OK** en `api/tests.py` (flujo,
+pagos, agenda, despacho, tienda, cuenta, permisos por rol, equipo, edición de pedidos, mostrador,
+imágenes, health, API admin-only, BOM y frontend) y `smoke_test.py` con todas las páginas en 200, 403 para
 ventas/cocina/cliente en la API y descuento/reposición de stock dentro de una transacción con
 rollback.
 

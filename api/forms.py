@@ -347,3 +347,83 @@ PedidoDetalleFormSet = inlineformset_factory(
     widgets={"personalizacion": forms.Textarea(attrs={"rows": 2})},
 )
 
+
+class VentaMostradorForm(forms.Form):
+    """Cierre de una venta directa de mostrador.
+
+    Permite elegir un cliente existente o crear uno nuevo con los datos
+    mínimos, definir si el cliente se lo lleva o si sale a delivery y registrar
+    el pago recibido en el momento.
+    """
+
+    cliente = forms.ModelChoiceField(
+        queryset=Cliente.objects.order_by("nombre"),
+        required=False,
+        label="Cliente registrado",
+        empty_label="— Cliente nuevo o sin ficha —",
+    )
+    nuevo_nombre = forms.CharField(
+        max_length=120, required=False, label="Nombre del cliente nuevo"
+    )
+    nuevo_telefono = forms.CharField(
+        max_length=20, required=False, label="Teléfono"
+    )
+    nuevo_email = forms.EmailField(required=False, label="Correo")
+    nueva_direccion = forms.CharField(
+        max_length=200, required=False, label="Dirección del cliente"
+    )
+
+    tipo = forms.ChoiceField(
+        choices=[
+            ("retiro", "Se lo lleva el cliente (retiro en tienda)"),
+            ("delivery", "Despacho delivery a domicilio"),
+        ],
+        initial="retiro",
+        widget=forms.RadioSelect,
+        label="Tipo de venta",
+    )
+    direccion_entrega = forms.CharField(
+        max_length=200, required=False, label="Dirección de entrega"
+    )
+    retirado_por = forms.CharField(
+        max_length=120, required=False, label="¿Quién retira?"
+    )
+
+    monto = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=0,
+        required=False,
+        initial=0,
+        label="Pago recibido",
+        help_text="Déjalo en 0 si queda saldo pendiente.",
+    )
+    metodo = forms.ChoiceField(
+        choices=Pago.METODOS, initial="efectivo", label="Método de pago"
+    )
+    observaciones = forms.CharField(
+        max_length=200,
+        required=False,
+        label="Observaciones",
+        widget=forms.Textarea(attrs={"rows": 2}),
+    )
+
+    def clean(self):
+        datos = super().clean()
+        cliente = datos.get("cliente")
+        nombre = (datos.get("nuevo_nombre") or "").strip()
+        telefono = (datos.get("nuevo_telefono") or "").strip()
+        if not cliente and not (nombre and telefono):
+            raise forms.ValidationError(
+                "Elige un cliente registrado o escribe nombre y teléfono para "
+                "crear uno nuevo."
+            )
+        if datos.get("tipo") == "delivery":
+            direccion = (datos.get("direccion_entrega") or "").strip()
+            if not direccion:
+                self.add_error(
+                    "direccion_entrega",
+                    "El delivery necesita una dirección de entrega.",
+                )
+        return datos
+

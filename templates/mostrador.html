@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Mostrador{% endblock %}
+
+{% block content %}
+<section class="panel-head">
+    <div>
+        <p class="panel-role">Venta de mostrador</p>
+        <h1>Mostrador</h1>
+        <p class="lede">
+            Busca un producto de vitrina, revisa su stock y ármale la venta al cliente.
+            Al cerrar, los insumos de la receta se descuentan automáticamente.
+        </p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-ghost" href="{% url 'pedidos' %}">Revisar pedidos</a>
+    </div>
+</section>
+
+<section class="grid-2 mostrador-layout">
+    <div class="panel">
+        <div class="panel-title">
+            <h2>Vitrina</h2>
+            <span class="muted small">{{ productos|length }} producto{{ productos|length|pluralize }} en vitrina</span>
+        </div>
+
+        <form method="get" class="form-inline mostrador-buscador">
+            <label class="grow">Buscar producto
+                <input type="search" name="q" value="{{ busqueda }}" placeholder="Nombre, categoría o descripción">
+            </label>
+            <button class="btn btn-ghost btn-mini" type="submit">Buscar</button>
+            {% if busqueda %}
+                <a class="link small" href="{% url 'mostrador' %}">Limpiar</a>
+            {% endif %}
+        </form>
+
+        {% if productos %}
+        <div class="vitrina-grid">
+            {% for producto in productos %}
+            <article class="vitrina-card {% if not producto.disponible %}is-agotado{% endif %}">
+                <div class="vitrina-media">
+                    <img src="{{ producto.imagen_url }}" alt="{{ producto.nombre }}">
+                </div>
+                <div class="vitrina-body">
+                    <div class="product-head">
+                        <h3>{{ producto.nombre }}</h3>
+                        <span class="product-price">${{ producto.precio_base|floatformat:0 }}</span>
+                    </div>
+                    <p class="muted small">{{ producto.categoria.nombre }}</p>
+                    {% if producto.unidades_disponibles is None %}
+                        <p class="stock-tag stock-ok">Sin receta: stock libre</p>
+                    {% elif producto.disponible %}
+                        <p class="stock-tag stock-ok">{{ producto.unidades_disponibles }} disponible{{ producto.unidades_disponibles|pluralize }} en vitrina</p>
+                    {% else %}
+                        <p class="stock-tag stock-out">Sin stock de insumos</p>
+                    {% endif %}
+                </div>
+                <form method="post" action="{% url 'mostrador_agregar' %}" class="vitrina-add">
+                    {% csrf_token %}
+                    <input type="hidden" name="producto" value="{{ producto.pk }}">
+                    <input type="hidden" name="q" value="{{ busqueda }}">
+                    <input type="number" name="cantidad" min="1" max="50" value="1" aria-label="Cantidad de {{ producto.nombre }}">
+                    <button class="btn btn-solid btn-mini" type="submit" {% if not producto.disponible %}disabled{% endif %}>Agregar</button>
+                </form>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">
+            <h2>No encontramos productos</h2>
+            <p class="muted">Prueba con otro nombre o revisa que el producto esté activo en el catálogo.</p>
+            <a class="link" href="{% url 'mostrador' %}">Ver toda la vitrina</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <aside class="panel mostrador-venta">
+        <div class="panel-title">
+            <h2>Venta actual</h2>
+            <span class="badge">{{ unidades }} unidad{{ unidades|pluralize:"es" }}</span>
+        </div>
+
+        {% if lineas %}
+        <table class="table mostrador-tabla">
+            <thead>
+                <tr><th>Producto</th><th>Cant.</th><th>Subtotal</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for linea in lineas %}
+                <tr>
+                    <td>
+                        <strong>{{ linea.producto.nombre }}</strong>
+                        <small class="muted">${{ linea.producto.precio_base|floatformat:0 }} c/u</small>
+                        {% if linea.disponibles is not None and linea.cantidad > linea.disponibles %}
+                            <small class="field-error">Solo {{ linea.disponibles }} disponibles</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="post" action="{% url 'mostrador_agregar' %}" class="qty-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="producto" value="{{ linea.producto.pk }}">
+                            <input type="hidden" name="q" value="{{ busqueda }}">
+                            <input type="number" name="cantidad" min="1" max="50" value="{{ linea.cantidad }}" aria-label="Cantidad de {{ linea.producto.nombre }}">
+                            <button class="btn btn-ghost btn-mini" type="submit">Fijar</button>
+                        </form>
+                    </td>
+                    <td>${{ linea.subtotal|floatformat:0 }}</td>
+                    <td>
+                        <form method="post" action="{% url 'mostrador_quitar' linea.producto.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn-danger btn-mini" type="submit">Quitar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <dl class="totales">
+            <dt>Total venta</dt><dd>${{ total|floatformat:0 }}</dd>
+        </dl>
+
+        <form method="post" action="{% url 'mostrador_confirmar' %}" class="form mt">
+            {% csrf_token %}
+
+            <fieldset class="venta-bloque">
+                <legend>Cliente</legend>
+                <label>{{ form.cliente.label }}
+                    {{ form.cliente }}
+                </label>
+                <p class="form-hint">O crea una ficha nueva con nombre y teléfono:</p>
+                <div class="form-row">
+                    <label>{{ form.nuevo_nombre.label }}
+                        {{ form.nuevo_nombre }}
+                    </label>
+                    <label>{{ form.nuevo_telefono.label }}
+                        {{ form.nuevo_telefono }}
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label>{{ form.nuevo_email.label }}
+                        {{ form.nuevo_email }}
+                    </label>
+                    <label>{{ form.nueva_direccion.label }}
+                        {{ form.nueva_direccion }}
+                    </label>
+                </div>
+            </fieldset>
+
+            <fieldset class="venta-bloque">
+                <legend>Entrega</legend>
+                <div class="radio-list">{{ form.tipo }}</div>
+                <label>{{ form.direccion_entrega.label }}
+                    {{ form.direccion_entrega }}
+                    <span class="form-hint">Obligatoria solo si es delivery.</span>
+                </label>
+                <label>{{ form.retirado_por.label }}
+                    {{ form.retirado_por }}
+                    <span class="form-hint">Si se deja vacío se usa el nombre del cliente.</span>
+                </label>
+            </fieldset>
+
+            <fieldset class="venta-bloque">
+                <legend>Pago</legend>
+                <div class="form-row">
+                    <label>{{ form.monto.label }}
+                        {{ form.monto }}
+                        <span class="form-hint">{{ form.monto.help_text }}</span>
+                    </label>
+                    <label>{{ form.metodo.label }}
+                        {{ form.metodo }}
+                    </label>
+                </div>
+                <label>{{ form.observaciones.label }}
+                    {{ form.observaciones }}
+                </label>
+            </fieldset>
+
+            <button class="btn btn-solid btn-lg btn-block" type="submit">Cerrar venta y descontar insumos</button>
+            <p class="muted small">El pedido se registra como venta directa: no ocupa cupo de la agenda.</p>
+        </form>
+
+        <form method="post" action="{% url 'mostrador_vaciar' %}" class="mt">
+            {% csrf_token %}
+            <button class="btn btn-ghost btn-mini" type="submit">Vaciar venta</button>
+        </form>
+        {% else %}
+        <div class="empty">
+            <h2>Venta vacía</h2>
+            <p class="muted">Agrega productos de la vitrina para comenzar a cobrar.</p>
+        </div>
+        {% endif %}
+    </aside>
+</section>
+{% endblock %}

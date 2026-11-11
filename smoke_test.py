@@ -48,17 +48,19 @@ if not interno.login(username="admin", password="Dulce2026!"):
     raise SystemExit("No se pudo iniciar sesión como admin.")
 
 print("\n== Panel interno y API (admin) ==")
-for ruta in ["/kanban/", "/pedidos/", "/inventario/", "/despachos/", "/equipo/", "/api/", "/api/pedidos/"]:
+for ruta in ["/kanban/", "/pedidos/", "/mostrador/", "/inventario/", "/despachos/", "/equipo/", "/api/", "/api/pedidos/"]:
     revisar(ruta, 200, interno)
 
 print("\n== La API queda cerrada para roles operativos ==")
 ventas = Client(SERVER_NAME="localhost")
 ventas.login(username="ventas", password="Dulce2026!")
 revisar("/api/pedidos/", 403, ventas, "ventas -> API")
+revisar("/mostrador/", 200, ventas, "ventas -> mostrador")
 
 cocina = Client(SERVER_NAME="localhost")
 cocina.login(username="cocina", password="Dulce2026!")
 revisar("/api/pedidos/", 403, cocina, "cocina -> API")
+revisar("/mostrador/", 302, cocina, "cocina -> mostrador")
 
 print("\n== Cliente de la tienda ==")
 cliente_web = Client(SERVER_NAME="localhost")

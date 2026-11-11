@@ -22,6 +22,16 @@ _Avoid_: Orden, compra, cotización
 Propuesta de precio y fecha que antecede al pedido; en el sistema el pedido ya nace con precio.
 _Avoid_: Presupuesto, pedido
 
+**Venta directa**:
+Venta de mostrador que se cobra y entrega en el momento; se guarda como pedido con
+`venta_directa=True`, descuenta insumos al cerrar y no reserva cupo de la agenda.
+_Avoid_: Venta rápida, pedido express
+
+**Venta en sesión**:
+Lista temporal de productos de vitrina que el vendedor arma antes de cobrar; los precios y el
+stock se leen siempre del catálogo vigente.
+_Avoid_: Carrito público, borrador de pedido
+
 **Canal**:
 Origen comercial del pedido: tienda en línea, mostrador o teléfono.
 _Avoid_: Medio, fuente

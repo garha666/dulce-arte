@@ -8,12 +8,17 @@
         <h1>Pedidos</h1>
         <p class="lede">
             {% if puede_crear %}
-                Registra pedidos de mostrador y revisa los que llegan desde la tienda.
+                Vende en mostrador o registra pedidos agendados, y revisa los que llegan desde la tienda.
             {% else %}
                 Consulta el avance de los pedidos. Registrar corresponde a ventas.
             {% endif %}
         </p>
     </div>
+    {% if puede_crear %}
+    <div class="panel-head-actions">
+        <a class="btn btn-solid" href="{% url 'mostrador' %}">Abrir mostrador</a>
+    </div>
+    {% endif %}
 </section>
 
 <section class="panel">
@@ -118,7 +123,10 @@
                 <td>{{ pedido.cliente.nombre }}</td>
                 <td>{{ pedido.fecha_entrega|date:"d/m H:i" }}</td>
                 <td>{{ pedido.get_modalidad_display }}</td>
-                <td><span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span></td>
+                <td>
+                    <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+                    {% if pedido.venta_directa %}<span class="badge badge-warn">Mostrador</span>{% endif %}
+                </td>
                 <td>{{ pedido.estado_pago_display }}</td>
                 <td>${{ pedido.total|floatformat:0 }}</td>
             </tr>

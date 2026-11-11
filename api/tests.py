@@ -812,3 +812,175 @@ class ImagenYHealthTest(BaseDulceArteTest):
         respuesta = self.client.get(reverse("health"))
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta.json()["status"], "ok")
+
+
+class MostradorTest(BaseDulceArteTest):
+    """Venta directa de mostrador: vitrina, cobro y descuento automático."""
+
+    def _agregar(self, cantidad=2):
+        return self.client.post(
+            reverse("mostrador_agregar"),
+            {"producto": self.producto.pk, "cantidad": cantidad, "q": ""},
+        )
+
+    def _datos_venta(self, **cambios):
+        datos = {
+            "cliente": "",
+            "nuevo_nombre": "Ana Mostrador",
+            "nuevo_telefono": "+56911112222",
+            "nuevo_email": "ana@test.cl",
+            "nueva_direccion": "Av. Siempre Viva 742",
+            "tipo": "retiro",
+            "direccion_entrega": "",
+            "retirado_por": "",
+            "monto": "20000",
+            "metodo": "efectivo",
+            "observaciones": "",
+        }
+        datos.update(cambios)
+        return datos
+
+    def test_vendedor_ve_la_vitrina(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        respuesta = self.client.get(reverse("mostrador"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Torta test")
+        self.assertContains(respuesta, "4 disponible")
+
+    def test_otros_roles_no_entran_al_mostrador(self):
+        self.client.login(username="cocina_test", password=CLAVE)
+        respuesta = self.client.get(reverse("mostrador"))
+        self.assertEqual(respuesta.status_code, 302)
+
+    def test_venta_retiro_cierra_y_descuenta_insumos(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        self._agregar(cantidad=2)
+
+        respuesta = self.client.post(
+            reverse("mostrador_confirmar"), self._datos_venta()
+        )
+
+        pedido = Pedido.objects.get(venta_directa=True)
+        self.assertRedirects(respuesta, reverse("pedido_detalle", args=[pedido.pk]))
+        self.assertEqual(pedido.estado, "entregado")
+        self.assertEqual(pedido.modalidad, "retiro")
+        self.assertTrue(pedido.insumos_descontados)
+        self.assertEqual(pedido.retirado_por, "Ana Mostrador")
+        self.assertEqual(pedido.total, Decimal("20000"))
+        self.assertEqual(pedido.estado_pago, "pagado")
+        self.harina.refresh_from_db()
+        self.assertEqual(self.harina.stock_actual, Decimal("500"))
+        self.assertEqual(
+            MovimientoInsumo.objects.filter(tipo="consumo", pedido=pedido).count(), 1
+        )
+
+    def test_venta_delivery_crea_despacho_y_marca_despachado(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        self._agregar(cantidad=1)
+
+        respuesta = self.client.post(
+            reverse("mostrador_confirmar"),
+            self._datos_venta(
+                tipo="delivery",
+                direccion_entrega="Los Aromos 45, Temuco",
+                retirado_por="",
+                monto="0",
+            ),
+        )
+
+        pedido = Pedido.objects.get(venta_directa=True)
+        self.assertRedirects(respuesta, reverse("pedido_detalle", args=[pedido.pk]))
+        self.assertEqual(pedido.estado, "despachado")
+        self.assertEqual(pedido.modalidad, "despacho")
+        self.assertTrue(pedido.insumos_descontados)
+        self.assertEqual(pedido.estado_pago, "pendiente")
+        self.assertTrue(hasattr(pedido, "despacho"))
+        self.assertEqual(pedido.despacho.direccion, "Los Aromos 45, Temuco")
+        self.harina.refresh_from_db()
+        self.assertEqual(self.harina.stock_actual, Decimal("750"))
+
+    def test_venta_reutiliza_cliente_por_telefono(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        self._agregar(cantidad=1)
+
+        self.client.post(
+            reverse("mostrador_confirmar"),
+            self._datos_venta(
+                nuevo_nombre="Otro nombre",
+                nuevo_telefono=self.cliente.telefono,
+                monto="0",
+            ),
+        )
+
+        pedido = Pedido.objects.get(venta_directa=True)
+        self.assertEqual(pedido.cliente, self.cliente)
+        self.assertEqual(Cliente.objects.count(), 1)
+
+    def test_venta_sin_productos_no_crea_pedido(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+        respuesta = self.client.post(
+            reverse("mostrador_confirmar"), self._datos_venta()
+        )
+        self.assertRedirects(respuesta, reverse("mostrador"))
+        self.assertFalse(Pedido.objects.filter(venta_directa=True).exists())
+
+    def test_venta_directa_no_ocupa_cupo_de_agenda(self):
+        fecha = timezone.localtime().replace(
+            hour=12, minute=0, second=0, microsecond=0
+        )
+        for _ in range(Pedido.CUPO_DIARIO - 1):
+            Pedido.objects.create(
+                cliente=self.cliente,
+                modalidad="retiro",
+                fecha_entrega=fecha,
+                estado="recibido",
+            )
+        for _ in range(3):
+            Pedido.objects.create(
+                cliente=self.cliente,
+                modalidad="retiro",
+                fecha_entrega=fecha,
+                estado="entregado",
+                venta_directa=True,
+            )
+
+        # Con 5 agendados y 3 ventas directas, todavía cabe un pedido agendado.
+        Pedido.validar_agenda(fecha, exigir_anticipacion=False)
+
+        Pedido.objects.create(
+            cliente=self.cliente,
+            modalidad="retiro",
+            fecha_entrega=fecha,
+            estado="recibido",
+        )
+        with self.assertRaises(ValidationError):
+            Pedido.validar_agenda(fecha, exigir_anticipacion=False)
+
+    def test_ventas_marca_pedido_listo_como_despachado(self):
+        pedido = self.crear_pedido(estado="listo", modalidad="despacho")
+        self.client.login(username="ventas_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("pedido_cambiar_estado", args=[pedido.pk]),
+            {"estado": "despachado"},
+        )
+
+        self.assertEqual(respuesta.status_code, 302)
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "despachado")
+        self.assertEqual(pedido.despacho.direccion, "Calle 123, Temuco")
+        self.assertIsNotNone(pedido.despacho.fecha_salida)
+
+    def test_retiro_desde_detalle_vuelve_al_detalle(self):
+        pedido = self.crear_pedido(estado="listo", modalidad="retiro")
+        self.client.login(username="ventas_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("retiro_confirmar", args=[pedido.pk]),
+            {"retirado_por": "María Retira", "next": "detalle"},
+        )
+
+        self.assertRedirects(respuesta, reverse("pedido_detalle", args=[pedido.pk]))
+        pedido.refresh_from_db()
+        self.assertEqual(pedido.estado, "entregado")
+        self.assertEqual(pedido.retirado_por, "María Retira")

@@ -44,6 +44,28 @@ urlpatterns = [
     path("kanban/", views.kanban_page, name="kanban"),
     path("pedidos/", views.pedidos_page, name="pedidos"),
     path("pedidos/nuevo/", views.pedido_crear, name="pedido_crear"),
+    # ------------------------------------------------- venta de mostrador
+    path("mostrador/", views.mostrador_page, name="mostrador"),
+    path(
+        "mostrador/agregar/",
+        views.mostrador_agregar,
+        name="mostrador_agregar",
+    ),
+    path(
+        "mostrador/quitar/<int:pk>/",
+        views.mostrador_quitar,
+        name="mostrador_quitar",
+    ),
+    path(
+        "mostrador/vaciar/",
+        views.mostrador_vaciar,
+        name="mostrador_vaciar",
+    ),
+    path(
+        "mostrador/confirmar/",
+        views.mostrador_confirmar,
+        name="mostrador_confirmar",
+    ),
     path("pedidos/<int:pk>/", views.pedido_detalle_page, name="pedido_detalle"),
     path(
         "pedidos/<int:pk>/editar/",

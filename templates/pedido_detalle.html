@@ -13,6 +13,9 @@
     </div>
     <div class="panel-head-actions">
         <span class="badge estado-{{ pedido.estado }}">{{ pedido.get_estado_display }}</span>
+        {% if pedido.venta_directa %}
+            <span class="badge badge-warn">Venta directa de mostrador</span>
+        {% endif %}
         <span class="badge {% if pedido.estado_pago == 'pagado' %}badge-ok{% elif pedido.estado_pago == 'parcial' %}badge-warn{% else %}badge-danger{% endif %}">
             {{ pedido.estado_pago_display }}
         </span>
@@ -91,13 +94,30 @@
                     <button class="btn btn-mini {% if clave == 'cancelado' %}btn-danger{% else %}btn-solid{% endif %}"
                             type="submit"
                             {% if clave == 'cancelado' %}onclick="return confirm('¿Cancelar el pedido? Se repondrán los insumos.');"{% endif %}>
-                        {{ etiqueta }}
+                        {% if clave == 'entregado' and pedido.modalidad == 'retiro' %}
+                            Vendido · entregado al cliente
+                        {% elif clave == 'despachado' and pedido.modalidad == 'despacho' %}
+                            Despachado · delivery
+                        {% else %}
+                            {{ etiqueta }}
+                        {% endif %}
                     </button>
                 </form>
                 {% empty %}
                 <p class="muted small">No hay acciones disponibles para tu rol en este estado.</p>
                 {% endfor %}
             </div>
+
+            {% if cerrar_retiro %}
+            <form method="post" action="{% url 'retiro_confirmar' pedido.pk %}" class="form mt">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="detalle">
+                <label>¿Quién retira?
+                    <input type="text" name="retirado_por" value="{{ pedido.retirado_por }}" required maxlength="120">
+                </label>
+                <button class="btn btn-solid" type="submit">Vendido · entregar al cliente</button>
+            </form>
+            {% endif %}
         </div>
 
         <div class="panel mt">
@@ -158,7 +178,9 @@
                 {% endif %}
                 <div><dt>Teléfono</dt><dd>{{ pedido.telefono_contacto|default:pedido.cliente.telefono }}</dd></div>
             </dl>
-            {% if pedido.insumos_descontados %}
+            {% if pedido.venta_directa %}
+                <p class="muted small mt">Venta directa de mostrador: los insumos se descontaron al cerrar la venta.</p>
+            {% elif pedido.insumos_descontados %}
                 <p class="muted small mt">Los insumos ya fueron descontados del inventario.</p>
             {% else %}
                 <p class="muted small mt">Los insumos se descuentan al pasar a “En preparación”.</p>

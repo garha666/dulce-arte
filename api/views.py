@@ -12,6 +12,7 @@ Tres capas bien separadas:
 from functools import wraps
 from datetime import timedelta
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -22,13 +23,14 @@ from django.db import connection, transaction
 from django.db.models import Count, F, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from . import carrito
+from . import carrito, mostrador
 from .forms import (
     CheckoutForm,
     ClienteCuentaForm,
@@ -42,6 +44,7 @@ from .forms import (
     RegistroClienteForm,
     SeguimientoForm,
     UsuarioInternoForm,
+    VentaMostradorForm,
 )
 from .models import (
     CategoriaProducto,
@@ -788,6 +791,188 @@ def pedido_crear(request):
     return redirect("pedido_detalle", pk=pedido.pk)
 
 
+# =========================================================================== #
+#  Venta directa de mostrador (vitrina + cobro inmediato)
+# =========================================================================== #
+
+
+def _volver_mostrador(request):
+    """Vuelve a la vitrina conservando la búsqueda del vendedor."""
+    busqueda = (request.POST.get("q") or "").strip()
+    url = reverse("mostrador")
+    return f"{url}?{urlencode({'q': busqueda})}" if busqueda else url
+
+
+@rol_requerido("admin", "ventas")
+def mostrador_page(request):
+    """Vitrina del vendedor: buscar productos, ver stock y armar la venta."""
+    busqueda = request.GET.get("q", "").strip()
+    productos = (
+        Producto.objects.filter(activo=True)
+        .select_related("categoria")
+        .prefetch_related("ingredientes__insumo")
+        .order_by("nombre")
+    )
+    if busqueda:
+        productos = productos.filter(
+            Q(nombre__icontains=busqueda)
+            | Q(descripcion__icontains=busqueda)
+            | Q(categoria__nombre__icontains=busqueda)
+        )
+
+    lineas, total, unidades = mostrador.detalle(request)
+    return render(
+        request,
+        "mostrador.html",
+        {
+            "productos": productos[:60],
+            "busqueda": busqueda,
+            "lineas": lineas,
+            "total": total,
+            "unidades": unidades,
+            "form": VentaMostradorForm(initial={"monto": total, "tipo": "retiro"}),
+        },
+    )
+
+
+@rol_requerido("admin", "ventas")
+@require_POST
+def mostrador_agregar(request):
+    producto = get_object_or_404(
+        Producto, pk=request.POST.get("producto"), activo=True
+    )
+    try:
+        cantidad = max(int(request.POST.get("cantidad", 1)), 1)
+    except (TypeError, ValueError):
+        cantidad = 1
+
+    disponibles = producto.unidades_disponibles
+    if disponibles is not None:
+        total = mostrador.cantidad(request, producto.pk) + cantidad
+        if total > disponibles:
+            messages.error(
+                request,
+                f"{producto.nombre}: solo hay {disponibles} unidad"
+                f"{'es' if disponibles != 1 else ''} disponible"
+                f"{'s' if disponibles != 1 else ''} con el stock actual.",
+            )
+            return redirect(_volver_mostrador(request))
+
+    mostrador.agregar(request, producto, cantidad)
+    messages.success(
+        request, f"{producto.nombre} agregado a la venta ({cantidad})."
+    )
+    return redirect(_volver_mostrador(request))
+
+
+@rol_requerido("admin", "ventas")
+@require_POST
+def mostrador_quitar(request, pk):
+    mostrador.quitar(request, pk)
+    return redirect("mostrador")
+
+
+@rol_requerido("admin", "ventas")
+@require_POST
+def mostrador_vaciar(request):
+    mostrador.vaciar(request)
+    messages.info(request, "Venta de mostrador vaciada.")
+    return redirect("mostrador")
+
+
+@rol_requerido("admin", "ventas")
+@require_POST
+def mostrador_confirmar(request):
+    """Cierra la venta: crea el pedido, cobra y descuenta insumos una sola vez."""
+    lineas, total, _ = mostrador.detalle(request)
+    if not lineas:
+        messages.error(request, "Agrega al menos un producto a la venta.")
+        return redirect("mostrador")
+
+    form = VentaMostradorForm(request.POST)
+    if not form.is_valid():
+        for errores in form.errors.values():
+            for error in errores:
+                messages.error(request, error)
+        return redirect("mostrador")
+
+    datos = form.cleaned_data
+    modalidad = "retiro" if datos["tipo"] == "retiro" else "despacho"
+    direccion = (datos.get("direccion_entrega") or "").strip()
+
+    try:
+        with transaction.atomic():
+            cliente = datos.get("cliente")
+            if cliente is None:
+                nombre = datos["nuevo_nombre"].strip()
+                telefono = datos["nuevo_telefono"].strip()
+                cliente = Cliente.objects.filter(telefono=telefono).first()
+                if cliente is None:
+                    cliente = Cliente.objects.create(
+                        nombre=nombre,
+                        telefono=telefono,
+                        email=(datos.get("nuevo_email") or "").strip(),
+                        direccion=(datos.get("nueva_direccion") or "").strip(),
+                    )
+
+            retirado_por = (datos.get("retirado_por") or "").strip()
+            if modalidad == "retiro":
+                retirado_por = retirado_por or cliente.nombre
+
+            pedido = Pedido(
+                cliente=cliente,
+                canal="mostrador",
+                modalidad=modalidad,
+                estado="recibido",
+                fecha_entrega=timezone.now(),
+                direccion_entrega=direccion,
+                telefono_contacto=cliente.telefono,
+                descripcion_diseno="Venta directa de mostrador",
+                observaciones=(datos.get("observaciones") or "").strip(),
+                retirado_por=retirado_por if modalidad == "retiro" else "",
+                creado_por=request.user,
+                venta_directa=True,
+            )
+            pedido.save()
+            for linea in lineas:
+                PedidoDetalle.objects.create(
+                    pedido=pedido,
+                    producto=linea["producto"],
+                    cantidad=linea["cantidad"],
+                )
+
+            monto = datos.get("monto") or Decimal("0")
+            if monto > 0:
+                pago = Pago(
+                    pedido=pedido,
+                    monto=monto,
+                    metodo=datos["metodo"],
+                    tipo="completo" if monto >= pedido.total else "anticipo",
+                    registrado_por=request.user,
+                )
+                pago.full_clean()
+                pago.save()
+
+            pedido.cambiar_estado(
+                "entregado" if modalidad == "retiro" else "despachado",
+                usuario=request.user,
+                comentario="Venta directa registrada en mostrador.",
+                venta_directa=True,
+            )
+    except DjangoValidationError as error:
+        for mensaje in error.messages:
+            messages.error(request, mensaje)
+        return redirect("mostrador")
+
+    mostrador.vaciar(request)
+    messages.success(
+        request,
+        f"Venta {pedido.codigo} registrada por ${pedido.total:,.0f}. "
+        f"Stock descontado y pedido {pedido.get_estado_display().lower()}.",
+    )
+    return redirect("pedido_detalle", pk=pedido.pk)
+
+
 @login_required
 def pedido_detalle_page(request, pk):
     pedido = get_object_or_404(_detalle_queryset(), pk=pk)
@@ -799,13 +984,24 @@ def pedido_detalle_page(request, pk):
         return redirect("mis_pedidos" if rol_de(request.user) == "cliente" else "home")
 
     rol = rol_de(request.user)
-    pedido.transiciones_visibles = pedido.transiciones_para(rol)
+    transiciones = pedido.transiciones_para(rol)
+    cerrar_retiro = (
+        pedido.estado == "listo"
+        and pedido.modalidad == "retiro"
+        and rol in ("admin", "ventas", "despacho")
+    )
+    if cerrar_retiro:
+        transiciones = [
+            transicion for transicion in transiciones if transicion[0] != "entregado"
+        ]
+    pedido.transiciones_visibles = transiciones
     return render(
         request,
         "pedido_detalle.html",
         {
             "pedido": pedido,
             "es_interno": es_interno,
+            "cerrar_retiro": cerrar_retiro,
             "puede_editar": rol in ROLES_PEDIDOS and not pedido.insumos_descontados,
             "puede_crear_pago": puede(request.user, "admin", "ventas"),
             "pago_form": PagoForm(initial={"tipo": "anticipo"}),
@@ -1148,6 +1344,16 @@ def despacho_confirmar(request, pk):
     return redirect("despachos")
 
 
+def _destino_retiro(request, pedido):
+    """Vuelve a la pantalla desde donde se cerró el retiro."""
+    destino = request.POST.get("next", "")
+    if destino == "detalle":
+        return redirect("pedido_detalle", pk=pedido.pk)
+    if destino == "pedidos":
+        return redirect("pedidos")
+    return redirect("despachos")
+
+
 @rol_requerido("admin", "ventas", "despacho")
 @require_POST
 def retiro_confirmar(request, pk):
@@ -1156,7 +1362,7 @@ def retiro_confirmar(request, pk):
     retirado_por = request.POST.get("retirado_por", "").strip()
     if not retirado_por:
         messages.error(request, "Indica quién retira el pedido.")
-        return redirect("despachos")
+        return _destino_retiro(request, pedido)
 
     pedido.retirado_por = retirado_por
     pedido.save(update_fields=["retirado_por"])
@@ -1170,8 +1376,8 @@ def retiro_confirmar(request, pk):
         for mensaje in error.messages:
             messages.error(request, mensaje)
     else:
-        messages.success(request, f"Pedido {pedido.codigo} entregado en tienda.")
-    return redirect("despachos")
+        messages.success(request, f"Pedido {pedido.codigo} vendido y entregado en tienda.")
+    return _destino_retiro(request, pedido)
 
 
 # =========================================================================== #

@@ -53,21 +53,24 @@ ROLES_INFO = {
     },
     "ventas": {
         "etiqueta": "Ventas / Cotizaciones",
-        "resumen": "Atiende al cliente, registra pedidos y cobra el anticipo antes de producir.",
+        "resumen": "Atiende al cliente, vende en mostrador, registra pedidos y cobra el anticipo antes de producir.",
         "atributos": ["Turno", "Especialidad (mostrador, cotizaciones, eventos)"],
         "responsabilidades": [
+            "Vender en mostrador productos de vitrina con stock disponible.",
             "Registrar pedidos de mostrador y revisar los de la tienda.",
             "Contactar al cliente, ajustar la agenda y la personalización.",
             "Registrar pagos y confirmar el pedido cuando hay abono.",
-            "Cancelar pedidos y coordinar retiros entregados en tienda.",
+            "Cancelar pedidos y cerrar retiros o ventas con delivery.",
         ],
         "permisos": [
+            "Mostrador: armar la venta, crear o elegir cliente y cobrar.",
             "Pedidos: crear, editar (antes del BOM), confirmar y cancelar.",
+            "Listo → Despachado (crea la ruta si falta) y Listo → Entregado (retiro).",
             "Registrar pagos y cerrar retiros con el nombre de quien retira.",
         ],
         "limites": [
             "No mueve pedidos en preparación, horneado ni calidad.",
-            "No crea rutas de despacho ni confirma entregas a domicilio.",
+            "No confirma entregas a domicilio con firma o comprobante.",
             "No accede al Admin de Django ni a la API.",
         ],
         "atributo_clave": "Turno: define quién atiende mostrador y teléfono.",
@@ -156,6 +159,7 @@ ROLES_INFO = {
 MENUS = {
     "admin": [
         ("home", "Panel"),
+        ("mostrador", "Mostrador"),
         ("pedidos", "Pedidos"),
         ("kanban", "Cocina"),
         ("inventario", "Insumos"),
@@ -165,6 +169,7 @@ MENUS = {
     ],
     "ventas": [
         ("home", "Panel"),
+        ("mostrador", "Mostrador"),
         ("pedidos", "Pedidos"),
         ("tienda", "Tienda"),
         ("contacto", "Contacto"),

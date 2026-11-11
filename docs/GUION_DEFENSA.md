@@ -89,7 +89,24 @@ python manage.py runserver
 > anticipo antiguo quedó solo como respaldo histórico. La transición a `confirmado` valida
 > `estado_pago != pendiente` en `Pedido.cambiar_estado`."
 
-## 6. Kanban y BOM (2 min)
+## 6. Venta directa de mostrador (2 min)
+
+1. Entrar con `ventas` / `Dulce2026!` → **Mostrador** (`/mostrador/`).
+2. Buscar “chocolate” y mostrar el stock disponible calculado desde el BOM.
+3. Agregar productos con cantidad; la venta se guarda en sesión y muestra el total.
+4. Elegir un cliente registrado o escribir nombre y teléfono para crear la ficha.
+5. Elegir **retiro** (se lo lleva el cliente) o **delivery**, registrar el pago y cerrar.
+6. Mostrar el pedido resultante: estado **Entregado** o **Despachado**, badge “Venta directa”,
+   insumos descontados y sin ocupar cupo de la agenda.
+7. En `/pedidos/`, abrir un pedido **Listo** y mostrar las acciones “Vendido · entregado al
+   cliente” y “Despachado · delivery”.
+
+> "La venta de mostrador reutiliza `Pedido` con `venta_directa=True`: no inventa otra entidad ni
+> otro flujo de pago. Al cerrar, `Pedido.cambiar_estado(..., venta_directa=True)` permite la ruta
+> express `recibido → entregado` (retiro) o `recibido → despachado` (delivery), descuenta el BOM
+> una sola vez y deja el historial. Solo admin y ventas pueden ejecutarla."
+
+## 7. Kanban y BOM (2 min)
 
 1. Anotar el stock de **Harina sin polvos** en `/inventario/`.
 2. Ir a `/kanban/` y mover el pedido a **En preparación**.
@@ -102,7 +119,7 @@ python manage.py runserver
 > stock, se revierte todo y se listan los faltantes. Cancelar ejecuta `reponer_insumos`, que
 > devuelve lo consumido y deja el movimiento de entrada como evidencia."
 
-## 7. Despacho y retiro (1,5 min)
+## 8. Despacho y retiro (1,5 min)
 
 1. Ir a **Despachos** → asignar ruta a un pedido **Listo** con modalidad despacho.
 2. Mostrar que el pedido pasó a **Despachado** y tiene fecha de salida.
@@ -114,7 +131,7 @@ python manage.py runserver
 > receptor y firma o comprobante (`Despacho.clean`), y el retiro exige `retirado_por`. Ambas
 > transiciones son atómicas y quedan en el historial."
 
-## 8. Equipo, roles, Admin y API (2 min)
+## 9. Equipo, roles, Admin y API (2 min)
 
 1. `/equipo/` → mostrar la guía de roles (responsabilidades, permisos, límites y transiciones) y
    crear un usuario de cocina con turno y especialidad, o un cliente con cuenta.
@@ -131,7 +148,7 @@ python manage.py runserver
 > administración: `EsAdministrador` cierra el resto con 403. Ningún template interno usa `/api/`
 > ni `fetch`."
 
-## 9. Modelo, verificación y cierre (1 min)
+## 10. Modelo, verificación y cierre (1 min)
 
 > "El modelo está en 3FN: categorías separadas, BOM en tabla intermedia, precio histórico en el
 > detalle, pagos como registro, historial de estados y movimientos de inventario como auditoría.
@@ -139,7 +156,7 @@ python manage.py runserver
 
 ```powershell
 python manage.py check
-python manage.py test api      # 54 pruebas
+python manage.py test api      # 63 pruebas
 python smoke_test.py           # no deja datos
 ```
 
@@ -154,7 +171,8 @@ python smoke_test.py           # no deja datos
 | ¿Dónde está la lógica de negocio? | En `models.py`: `cambiar_estado`, `validar_agenda`, `descontar_insumos`, `reponer_insumos`, `Despacho.clean`. Las vistas solo orquestan. |
 | ¿Cómo se calcula el pago? | `total_pagado` suma los `Pago`; `estado_pago` es pendiente, parcial o pagado; `saldo = total − pagado`. Sin pagos no se confirma. |
 | ¿Cómo evitas vender sin stock? | `Producto.unidades_disponibles` sale del BOM y el checkout compara cada línea antes de crear el pedido. |
-| ¿Cómo funciona la agenda? | 48 h para web, 09:00–18:59 de Santiago y cupo de 6 por día; el mostrador no exige anticipación pero sí horario y cupo. |
+| ¿Cómo funciona la agenda? | 48 h para web, 09:00–18:59 de Santiago y cupo de 6 por día; el pedido agendado de mostrador no exige anticipación pero sí horario y cupo; la venta directa no ocupa cupo. |
+| ¿Cómo se registra una venta de mostrador? | `/mostrador/` arma una venta en sesión con precios y stock vigentes; al cerrar crea un `Pedido` con `venta_directa=True`, registra el pago y descuenta el BOM una sola vez. |
 | ¿Cómo evitas descontar dos veces? | Bandera `insumos_descontados` + transacción atómica + `select_for_update`. |
 | ¿Qué pasa si no hay stock? | `ValidationError` con los faltantes; la transacción se revierte y el pedido no cambia de estado. |
 | ¿Se puede entregar sin evidencia? | No: el despacho exige receptor y firma o comprobante; el retiro exige `retirado_por`. |
