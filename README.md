@@ -73,8 +73,6 @@ dulce-arte/
 │   └── urls.py
 ├── templates/            # tienda, cuenta, paneles por rol, equipo y sitio público
 ├── static/               # css/estilos.css, fonts/ e IMAGES/productos/ (fotos demo)
-├── docs/                 # constitución, modelo de datos, guion y ADRs
-├── specs/                # especificaciones SDD 001 y 002
 ├── deploy/               # gunicorn.service, nginx.conf, guía de despliegue
 ├── seed_data.py          # datos de prueba (incluye cliente demo)
 ├── smoke_test.py         # verificación rápida no destructiva
@@ -238,9 +236,3 @@ Antes de publicar la instancia:
   (Nginx + certificado) para que las cookies de sesión viajen cifradas. Cuando el HTTPS esté
   activo, poner `DJANGO_SECURE_COOKIES=True`; con HTTP simple debe quedar en `False`.
 - Rotar las credenciales si el repositorio o la instancia ya estuvieron expuestos.
-
-## Defensa
-
-Guion de demostración y preguntas frecuentes: [`docs/GUION_DEFENSA.md`](docs/GUION_DEFENSA.md).
-Decisiones de arquitectura: [`docs/adr/`](docs/adr/). Vocabulario del dominio:
-[`GLOSSARY.md`](GLOSSARY.md).
