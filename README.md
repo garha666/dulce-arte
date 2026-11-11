@@ -12,7 +12,7 @@ páginas Django server-side.
 - Repositorio: <https://github.com/garha666/dulce-arte>
 - Sección: IEC-N4-C1
 - Docente: Marcelo Alvarado Aravena
-- IP pública AWS EC2: <http://23.23.34.184/> (Elastic IP, `us-east-1`)
+- URL de producción: <https://dulce-arte-2026.duckdns.org/> (Duck DNS + Elastic IP `23.23.34.184`)
 
 ## Stack
 
@@ -220,12 +220,14 @@ También hay un script idempotente: `bash deploy/instalar.sh`.
 ### Estado del despliegue (11-11-2026)
 
 - Instancia `i-04ad1331475c6def0` — `t3.micro`, Ubuntu Server 22.04 LTS, `us-east-1`.
-- Elastic IP `23.23.34.184` → <http://23.23.34.184/>.
+- Elastic IP `23.23.34.184` y dominio `dulce-arte-2026.duckdns.org` →
+  <https://dulce-arte-2026.duckdns.org/>.
+- HTTPS con Let's Encrypt (Certbot + Nginx, renovación automática); HTTP redirige 301 a HTTPS.
 - PostgreSQL 16 local en la instancia; `gunicorn`, `nginx` y `postgresql` activos.
 - Desplegado con `SEED_DEMO_DATA=true` (datos de demostración cargados).
 - Verificado: `/` 200, `/tienda/` 200, `/login/` 200, `/admin/` 302, `/mostrador/` 302 y
   `/api/` 403 sin sesión; login de `admin` y páginas internas (`/pedidos/`, `/kanban/`,
-  `/inventario/`, `/equipo/`, `/mostrador/`, `/despachos/`) en 200.
+  `/inventario/`, `/equipo/`, `/mostrador/`, `/despachos/`) en 200 por HTTPS.
 
 Antes de publicar la instancia:
 

@@ -138,9 +138,29 @@ reservada a administración y el resto del equipo trabaja en el panel HTML.
 
 ## 9. HTTPS y cookies seguras (recomendado)
 
-Con un certificado (por ejemplo, Let's Encrypt) en Nginx:
+### Dominio gratuito con Duck DNS
 
-1. Cambia `DJANGO_CSRF_TRUSTED_ORIGINS=https://IP_ELASTICA` en `.env`.
+1. Entra a <https://www.duckdns.org/>, inicia sesión y crea el subdominio (por ejemplo
+   `dulce-arte-2026`).
+2. Apunta el dominio a la Elastic IP de la instancia (`current ip` → `update ip`).
+3. Comprueba la resolución: `nslookup dulce-arte-2026.duckdns.org` debe devolver la IP elástica.
+
+### Certificado con Let's Encrypt
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo sed -i 's|server_name _;|server_name dulce-arte-2026.duckdns.org _;|' /etc/nginx/sites-available/dulcearte
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d dulce-arte-2026.duckdns.org --agree-tos \
+  --register-unsafely-without-email --redirect
+```
+
+Certbot agrega el bloque 443, redirige HTTP a HTTPS y programa la renovación automática.
+
+### Variables de entorno
+
+1. Agrega el dominio a `DJANGO_ALLOWED_HOSTS` y `DJANGO_CSRF_TRUSTED_ORIGINS`
+   (`https://dulce-arte-2026.duckdns.org`).
 2. Cambia `DJANGO_SECURE_COOKIES=True`.
 3. Reinicia: `sudo systemctl restart gunicorn nginx`.
 
