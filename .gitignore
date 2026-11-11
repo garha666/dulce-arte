@@ -24,3 +24,6 @@ Thumbs.db
 
 # Despliegue
 deploy/*.pem
+
+# Analisis local (no versionar)
+analysis_outputs/
