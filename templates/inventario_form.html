@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<section class="page-head">
+    <div>
+        <p class="panel-role">Bodega</p>
+        <h1>{{ titulo }}</h1>
+        <p class="lede">
+            {% if insumo %}
+                Ajusta los datos del insumo. El cambio se refleja de inmediato en el stock y en las recetas.
+            {% else %}
+                Registra un insumo para controlar su stock y usarlo en las recetas de los productos.
+            {% endif %}
+        </p>
+    </div>
+    <div class="panel-head-actions">
+        <a class="btn btn-ghost" href="{% url 'inventario' %}">Volver al inventario</a>
+    </div>
+</section>
+
+<section class="panel">
+    <form method="post" class="form">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+            <div class="errorlist">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        <div class="form-row">
+            <label>Nombre {{ form.nombre }}{{ form.nombre.errors }}</label>
+            <label>Categoría {{ form.categoria }}{{ form.categoria.errors }}</label>
+        </div>
+
+        <div class="form-row">
+            <label>Unidad de medida {{ form.unidad }}{{ form.unidad.errors }}</label>
+            <label>¿Es perecible? {{ form.perecible }}{{ form.perecible.errors }}</label>
+        </div>
+
+        <div class="form-row">
+            <label>Stock actual {{ form.stock_actual }}{{ form.stock_actual.errors }}</label>
+            <label>Stock mínimo {{ form.stock_minimo }}{{ form.stock_minimo.errors }}</label>
+        </div>
+
+        <label>Costo unitario {{ form.costo_unitario }}{{ form.costo_unitario.errors }}</label>
+
+        <div class="panel-head-actions mt">
+            <button class="btn btn-solid" type="submit">Guardar insumo</button>
+            <a class="btn btn-ghost" href="{% url 'inventario' %}">Cancelar</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

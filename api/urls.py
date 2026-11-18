@@ -84,6 +84,17 @@ urlpatterns = [
     ),
     path("pedidos/<int:pk>/retiro/", views.retiro_confirmar, name="retiro_confirmar"),
     path("inventario/", views.inventario_page, name="inventario"),
+    path("inventario/nuevo/", views.insumo_crear, name="insumo_crear"),
+    path(
+        "inventario/<int:pk>/editar/",
+        views.insumo_editar,
+        name="insumo_editar",
+    ),
+    path(
+        "inventario/<int:pk>/eliminar/",
+        views.insumo_eliminar,
+        name="insumo_eliminar",
+    ),
     path("equipo/", views.equipo_page, name="equipo"),
     path(
         "equipo/usuarios/nuevo/",

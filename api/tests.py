@@ -57,6 +57,11 @@ class BaseDulceArteTest(TestCase):
         self.cocina = User.objects.create_user(username="cocina_test", password=CLAVE)
         Perfil.objects.create(user=self.cocina, rol="cocina")
 
+        self.calidad = User.objects.create_user(
+            username="calidad_test", password=CLAVE
+        )
+        Perfil.objects.create(user=self.calidad, rol="calidad")
+
         self.despacho_user = User.objects.create_user(
             username="despacho_test", password=CLAVE
         )
@@ -1007,3 +1012,115 @@ class PrivacidadRecetaTest(BaseDulceArteTest):
         self.assertEqual(respuesta.status_code, 200)
         self.assertContains(respuesta, "Receta e ingredientes")
         self.assertContains(respuesta, "Harina test")
+
+
+class InsumoCrudTest(BaseDulceArteTest):
+    """Alta, edición y borrado de insumos desde el panel de inventario."""
+
+    def datos_insumo(self, **cambios):
+        datos = {
+            "nombre": "Azúcar rubia",
+            "categoria": "",
+            "unidad": "g",
+            "stock_actual": "500",
+            "stock_minimo": "100",
+            "costo_unitario": "1.50",
+        }
+        datos.update(cambios)
+        return datos
+
+    def test_admin_crea_insumo(self):
+        self.client.login(username="admin_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("insumo_crear"), self.datos_insumo()
+        )
+
+        self.assertRedirects(respuesta, reverse("inventario"))
+        insumo = Insumo.objects.get(nombre="Azúcar rubia")
+        self.assertEqual(insumo.stock_actual, Decimal("500"))
+
+    def test_cocina_edita_stock_del_insumo(self):
+        self.client.login(username="cocina_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("insumo_editar", args=[self.harina.pk]),
+            self.datos_insumo(nombre=self.harina.nombre, stock_actual="800"),
+        )
+
+        self.assertRedirects(respuesta, reverse("inventario"))
+        self.harina.refresh_from_db()
+        self.assertEqual(self.harina.stock_actual, Decimal("800"))
+
+    def test_ventas_no_puede_crear_insumo(self):
+        self.client.login(username="ventas_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("insumo_crear"), self.datos_insumo(nombre="Insumo prohibido")
+        )
+
+        self.assertRedirects(respuesta, reverse("home"))
+        self.assertFalse(
+            Insumo.objects.filter(nombre="Insumo prohibido").exists()
+        )
+
+    def test_calidad_no_puede_editar_insumo(self):
+        self.client.login(username="calidad_test", password=CLAVE)
+
+        respuesta = self.client.get(
+            reverse("insumo_editar", args=[self.harina.pk])
+        )
+
+        self.assertRedirects(respuesta, reverse("home"))
+
+    def test_admin_elimina_insumo_sin_uso(self):
+        insumo = Insumo.objects.create(
+            nombre="Insumo temporal",
+            unidad="un",
+            stock_actual=Decimal("10"),
+        )
+        self.client.login(username="admin_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("insumo_eliminar", args=[insumo.pk])
+        )
+
+        self.assertRedirects(respuesta, reverse("inventario"))
+        self.assertFalse(Insumo.objects.filter(pk=insumo.pk).exists())
+
+    def test_no_elimina_insumo_usado_en_receta(self):
+        self.client.login(username="admin_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("insumo_eliminar", args=[self.harina.pk])
+        )
+
+        self.assertRedirects(respuesta, reverse("inventario"))
+        self.assertTrue(Insumo.objects.filter(pk=self.harina.pk).exists())
+
+    def test_no_elimina_insumo_con_movimientos(self):
+        insumo = Insumo.objects.create(
+            nombre="Insumo auditado",
+            unidad="un",
+            stock_actual=Decimal("10"),
+        )
+        MovimientoInsumo.objects.create(
+            insumo=insumo,
+            tipo="entrada",
+            cantidad=Decimal("100"),
+            usuario=self.admin,
+        )
+        self.client.login(username="admin_test", password=CLAVE)
+
+        respuesta = self.client.post(
+            reverse("insumo_eliminar", args=[insumo.pk])
+        )
+
+        self.assertRedirects(respuesta, reverse("inventario"))
+        self.assertTrue(Insumo.objects.filter(pk=insumo.pk).exists())
+
+    def test_anonimo_va_al_login(self):
+        respuesta = self.client.get(reverse("insumo_crear"))
+
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn(reverse("login"), respuesta.url)

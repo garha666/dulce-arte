@@ -9,7 +9,17 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.forms import inlineformset_factory
 
-from .models import Cliente, Despacho, Pago, Pedido, PedidoDetalle, Perfil, Producto
+from .models import (
+    CategoriaInsumo,
+    Cliente,
+    Despacho,
+    Insumo,
+    Pago,
+    Pedido,
+    PedidoDetalle,
+    Perfil,
+    Producto,
+)
 
 DATE_INPUT = forms.DateTimeInput(
     attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
@@ -155,6 +165,58 @@ class DespachoForm(forms.ModelForm):
             perfil__rol__in=["despacho", "admin"]
         ).order_by("first_name")
         self.fields["repartidor"].required = False
+
+
+class InsumoForm(forms.ModelForm):
+    """Alta y edición de insumos desde el panel de inventario."""
+
+    class Meta:
+        model = Insumo
+        fields = (
+            "nombre",
+            "categoria",
+            "unidad",
+            "stock_actual",
+            "stock_minimo",
+            "costo_unitario",
+            "perecible",
+        )
+        widgets = {
+            "stock_actual": forms.NumberInput(
+                attrs={"step": "0.001", "min": "0"}
+            ),
+            "stock_minimo": forms.NumberInput(
+                attrs={"step": "0.001", "min": "0"}
+            ),
+            "costo_unitario": forms.NumberInput(
+                attrs={"step": "0.01", "min": "0"}
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["categoria"].queryset = CategoriaInsumo.objects.order_by(
+            "nombre"
+        )
+        self.fields["categoria"].required = False
+
+    def clean_stock_actual(self):
+        stock = self.cleaned_data["stock_actual"]
+        if stock < 0:
+            raise forms.ValidationError("El stock no puede ser negativo.")
+        return stock
+
+    def clean_stock_minimo(self):
+        minimo = self.cleaned_data["stock_minimo"]
+        if minimo < 0:
+            raise forms.ValidationError("El mínimo no puede ser negativo.")
+        return minimo
+
+    def clean_costo_unitario(self):
+        costo = self.cleaned_data["costo_unitario"]
+        if costo < 0:
+            raise forms.ValidationError("El costo no puede ser negativo.")
+        return costo
 
 
 class ConfirmarEntregaForm(forms.Form):

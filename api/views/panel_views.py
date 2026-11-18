@@ -17,6 +17,7 @@ from ..forms import (
     ConfirmarEntregaForm,
     DespachoForm,
     EstadoForm,
+    InsumoForm,
     PagoForm,
     PedidoDetalleFormSet,
     PedidoEdicionForm,
@@ -408,8 +409,75 @@ def inventario_page(request):
             "productos": Producto.objects.prefetch_related(
                 "ingredientes__insumo"
             ),
+            "puede_editar_insumos": puede(request.user, "admin", "cocina"),
+            "puede_eliminar_insumos": puede(request.user, "admin"),
         },
     )
+
+
+@rol_requerido("admin", "cocina")
+def insumo_crear(request):
+    if request.method == "POST":
+        form = InsumoForm(request.POST)
+        if form.is_valid():
+            insumo = form.save()
+            messages.success(request, f"Insumo {insumo.nombre} creado.")
+            return redirect("inventario")
+    else:
+        form = InsumoForm()
+
+    return render(
+        request,
+        "inventario_form.html",
+        {"form": form, "titulo": "Nuevo insumo", "insumo": None},
+    )
+
+
+@rol_requerido("admin", "cocina")
+def insumo_editar(request, pk):
+    insumo = get_object_or_404(Insumo, pk=pk)
+
+    if request.method == "POST":
+        form = InsumoForm(request.POST, instance=insumo)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Insumo {insumo.nombre} actualizado.")
+            return redirect("inventario")
+    else:
+        form = InsumoForm(instance=insumo)
+
+    return render(
+        request,
+        "inventario_form.html",
+        {"form": form, "titulo": f"Editar {insumo.nombre}", "insumo": insumo},
+    )
+
+
+@rol_requerido("admin")
+@require_POST
+def insumo_eliminar(request, pk):
+    insumo = get_object_or_404(Insumo, pk=pk)
+
+    if insumo.usos.exists():
+        messages.error(
+            request,
+            f"No se puede eliminar {insumo.nombre}: se usa en una receta. "
+            "Quítalo del BOM antes de borrarlo.",
+        )
+        return redirect("inventario")
+
+    if insumo.movimientos.exists():
+        messages.error(
+            request,
+            f"No se puede eliminar {insumo.nombre}: tiene movimientos de "
+            "inventario y borrarlos rompería la auditoría.",
+        )
+        return redirect("inventario")
+
+    nombre = insumo.nombre
+    insumo.delete()
+    messages.success(request, f"Insumo {nombre} eliminado.")
+    return redirect("inventario")
 
 
 @rol_requerido("admin", "despacho")
