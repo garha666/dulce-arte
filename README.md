@@ -63,7 +63,9 @@ dulce-arte/
 │   ├── carrito.py        # carrito en sesión con precios frescos
 │   ├── mostrador.py      # venta directa de mostrador en sesión
 │   ├── forms.py          # formularios de tienda y panel interno
-│   ├── views.py          # tienda, cuenta, panel, acciones y ViewSets
+│   ├── views/            # vistas por dominio: tienda, panel, mostrador, API, util
+│   ├── services/         # lógica de negocio reutilizable (mostrador, despacho)
+│   ├── selectors.py      # consultas compartidas (cliente del usuario)
 │   ├── serializers.py
 │   ├── permissions.py    # EsAdministrador: única llave de la API
 │   ├── roles.py          # roles, menús y permisos de navegación

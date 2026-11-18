@@ -177,3 +177,4 @@ dejaría de mantener la sesión.
 | `(13) Permission denied` | Nginx no puede leer el socket | `chown ubuntu:www-data` + `chmod 660` |
 | Admin sin estilos | no se ejecutó `collectstatic` | ejecutarlo y revisar `location /static/` |
 | `connection refused` a la BD | PostgreSQL detenido | `sudo systemctl restart postgresql` |
+| El sitio no responde y SSH da timeout | el laboratorio AWS Academy detuvo la instancia por inactividad | iniciarla con `aws ec2 start-instances --instance-ids i-04ad1331475c6def0` y esperar `instance-running`; la Elastic IP se conserva |
