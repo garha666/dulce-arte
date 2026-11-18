@@ -1,19 +1,18 @@
 """Venta directa de mostrador (vitrina + cobro inmediato)."""
 
-from decimal import Decimal
 from django.contrib import messages
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
+from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.views.decorators.http import require_POST
 from urllib.parse import urlencode
 
 from .. import mostrador
 from ..forms import VentaMostradorForm
-from ..models import Cliente, Pedido, PedidoDetalle, Pago, Producto
-from .panel_views import rol_requerido
+from ..models import Producto
+from ..roles import rol_requerido
+from ..services.mostrador import cerrar_venta_mostrador
 
 
 def _volver_mostrador(request):
@@ -106,7 +105,7 @@ def mostrador_vaciar(request):
 @require_POST
 def mostrador_confirmar(request):
     """Cierra la venta: crea el pedido, cobra y descuenta insumos una sola vez."""
-    lineas, total, _ = mostrador.detalle(request)
+    lineas, _, _ = mostrador.detalle(request)
     if not lineas:
         messages.error(request, "Agrega al menos un producto a la venta.")
         return redirect("mostrador")
@@ -119,69 +118,9 @@ def mostrador_confirmar(request):
         return redirect("mostrador")
 
     datos = form.cleaned_data
-    modalidad = "retiro" if datos["tipo"] == "retiro" else "despacho"
-    direccion = (datos.get("direccion_entrega") or "").strip()
-
     try:
-        with transaction.atomic():
-            cliente = datos.get("cliente")
-            if cliente is None:
-                nombre = datos["nuevo_nombre"].strip()
-                telefono = datos["nuevo_telefono"].strip()
-                cliente = Cliente.objects.filter(telefono=telefono).first()
-                if cliente is None:
-                    cliente = Cliente.objects.create(
-                        nombre=nombre,
-                        telefono=telefono,
-                        email=(datos.get("nuevo_email") or "").strip(),
-                        direccion=(datos.get("nueva_direccion") or "").strip(),
-                    )
-
-            retirado_por = (datos.get("retirado_por") or "").strip()
-            if modalidad == "retiro":
-                retirado_por = retirado_por or cliente.nombre
-
-            pedido = Pedido(
-                cliente=cliente,
-                canal="mostrador",
-                modalidad=modalidad,
-                estado="recibido",
-                fecha_entrega=timezone.now(),
-                direccion_entrega=direccion,
-                telefono_contacto=cliente.telefono,
-                descripcion_diseno="Venta directa de mostrador",
-                observaciones=(datos.get("observaciones") or "").strip(),
-                retirado_por=retirado_por if modalidad == "retiro" else "",
-                creado_por=request.user,
-                venta_directa=True,
-            )
-            pedido.save()
-            for linea in lineas:
-                PedidoDetalle.objects.create(
-                    pedido=pedido,
-                    producto=linea["producto"],
-                    cantidad=linea["cantidad"],
-                )
-
-            monto = datos.get("monto") or Decimal("0")
-            if monto > 0:
-                pago = Pago(
-                    pedido=pedido,
-                    monto=monto,
-                    metodo=datos["metodo"],
-                    tipo="completo" if monto >= pedido.total else "anticipo",
-                    registrado_por=request.user,
-                )
-                pago.full_clean()
-                pago.save()
-
-            pedido.cambiar_estado(
-                "entregado" if modalidad == "retiro" else "despachado",
-                usuario=request.user,
-                comentario="Venta directa registrada en mostrador.",
-                venta_directa=True,
-            )
-    except DjangoValidationError as error:
+        pedido = cerrar_venta_mostrador(request, datos, lineas)
+    except ValidationError as error:
         for mensaje in error.messages:
             messages.error(request, mensaje)
         return redirect("mostrador")

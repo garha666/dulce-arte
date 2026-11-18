@@ -1,14 +1,13 @@
 """Panel interno: pedidos, equipo, kanban, inventario y despachos."""
 
 from datetime import timedelta
-from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -28,10 +27,10 @@ from ..models import (
     Cliente,
     Despacho,
     Insumo,
-    MovimientoInsumo,
     Pedido,
     PedidoDetalle,
     Perfil,
+    Producto,
 )
 from ..roles import (
     ROLES_EQUIPO,
@@ -40,47 +39,14 @@ from ..roles import (
     ROLES_PEDIDOS,
     puede,
     rol_de,
+    rol_requerido,
 )
-
-COSTO_DESPACHO = Decimal("3500")
+from ..services.despacho import crear_despacho
 
 
 # --------------------------------------------------------------------------- #
-#  Utilidades de rol y de cliente
+#  Utilidades internas
 # --------------------------------------------------------------------------- #
-
-
-def rol_requerido(*roles):
-    """Restringe una página a los roles indicados y redirige al panel si no aplica."""
-
-    def decorador(vista):
-        @login_required
-        def envoltura(request, *args, **kwargs):
-            if not puede(request.user, *roles):
-                messages.error(request, "Tu rol no tiene acceso a esa sección.")
-                return redirect("home")
-            return vista(request, *args, **kwargs)
-
-        return envoltura
-
-    return decorador
-
-
-def cliente_de(user):
-    """Ficha de cliente vinculada al usuario, si existe."""
-    if not user.is_authenticated:
-        return None
-    return Cliente.objects.filter(user=user).first()
-
-
-def pedidos_visibles(user):
-    """Pedidos que el usuario puede consultar según su rol."""
-    if rol_de(user) in ROLES_INTERNOS:
-        return Pedido.objects.all()
-    cliente = cliente_de(user)
-    if cliente:
-        return Pedido.objects.filter(cliente=cliente)
-    return Pedido.objects.none()
 
 
 def _detalle_queryset():
@@ -476,15 +442,7 @@ def despacho_crear(request):
         return redirect("despachos")
 
     try:
-        with transaction.atomic():
-            despacho = form.save()
-            despacho.full_clean()
-            despacho.save()
-            despacho.pedido.cambiar_estado(
-                "despachado",
-                usuario=request.user,
-                comentario="Pedido asignado a reparto.",
-            )
+        despacho = crear_despacho(request, form)
     except DjangoValidationError as error:
         for mensaje in error.messages:
             messages.error(request, mensaje)

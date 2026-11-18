@@ -4,6 +4,10 @@ Centraliza qué puede ver cada rol para que las vistas HTML y los templates
 no repitan condicionales.
 """
 
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import redirect
+
 from .models import Pedido, Perfil
 
 ETIQUETAS_ROL = dict(Perfil.ROLES)
@@ -222,6 +226,22 @@ def menu_para(user):
 def puede(user, *roles):
     """True si el rol del usuario está dentro de los roles permitidos."""
     return rol_de(user) in roles
+
+
+def rol_requerido(*roles):
+    """Restringe una página a los roles indicados y redirige al panel si no aplica."""
+
+    def decorador(vista):
+        @login_required
+        def envoltura(request, *args, **kwargs):
+            if not puede(request.user, *roles):
+                messages.error(request, "Tu rol no tiene acceso a esa sección.")
+                return redirect("home")
+            return vista(request, *args, **kwargs)
+
+        return envoltura
+
+    return decorador
 
 
 def puede_transicion(user, pedido, nuevo_estado):

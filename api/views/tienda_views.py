@@ -9,23 +9,18 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Q
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .. import carrito
-from ..forms import (
-    CheckoutForm,
-    ClienteCuentaForm,
-    RegistroClienteForm,
-    SeguimientoForm,
-)
+from ..forms import CheckoutForm, RegistroClienteForm, SeguimientoForm
 from ..models import (
     CategoriaProducto,
     Cliente,
     Despacho,
+    Insumo,
     MensajeContacto,
     MovimientoInsumo,
     Pedido,
@@ -33,8 +28,8 @@ from ..models import (
     Perfil,
     Producto,
 )
-from django.db.models import Count, F, Q
-from ..roles import ROLES_INTERNOS, puede, rol_de
+from ..roles import ROLES_INTERNOS, rol_de
+from ..selectors import cliente_de
 
 
 def _cliente_para_checkout(request, form):
@@ -56,13 +51,6 @@ def _cliente_para_checkout(request, form):
         cliente.user = request.user
     cliente.save()
     return cliente
-
-
-def cliente_de(user):
-    """Ficha de cliente vinculada al usuario, si existe."""
-    if not user.is_authenticated:
-        return None
-    return Cliente.objects.filter(user=user).first()
 
 
 def _validar_stock(lineas):

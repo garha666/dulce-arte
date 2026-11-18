@@ -1,5 +1,6 @@
 """API REST — solo administración (Viewsets DRF)."""
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -8,11 +9,9 @@ from ..models import (
     Cliente,
     Despacho,
     Insumo,
-    MensajeContacto,
     MovimientoInsumo,
     Pago,
     Pedido,
-    PedidoDetalle,
     Producto,
 )
 from ..permissions import EsAdministrador
@@ -20,14 +19,11 @@ from ..serializers import (
     ClienteSerializer,
     DespachoSerializer,
     InsumoSerializer,
-    MensajeContactoSerializer,
     MovimientoInsumoSerializer,
     PagoSerializer,
     PedidoSerializer,
     ProductoSerializer,
 )
-
-from django.core.exceptions import ValidationError as DjangoValidationError
 
 
 class PedidoViewSet(viewsets.ModelViewSet):

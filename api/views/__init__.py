@@ -12,7 +12,9 @@ Se re-exportan todos los símbolos para que ``from . import views`` y
 ``views.<funcion>`` sigan funcionando sin cambiar ``urls.py``.
 """
 
-from .api_views import (
+from ..roles import rol_requerido  # noqa: F401
+from ..selectors import cliente_de  # noqa: F401
+from .api_views import (  # noqa: F401
     ClienteViewSet,
     DespachoViewSet,
     InsumoViewSet,
@@ -21,15 +23,14 @@ from .api_views import (
     PedidoViewSet,
     ProductoViewSet,
 )
-from .mostrador_views import (
+from .mostrador_views import (  # noqa: F401
     mostrador_agregar,
     mostrador_confirmar,
     mostrador_page,
     mostrador_quitar,
     mostrador_vaciar,
 )
-from .panel_views import (
-    cliente_de,
+from .panel_views import (  # noqa: F401
     despacho_confirmar,
     despacho_crear,
     despachos_page,
@@ -44,10 +45,9 @@ from .panel_views import (
     pedido_detalle_page,
     pedido_editar,
     pedido_registrar_pago,
-    rol_requerido,
     retiro_confirmar,
 )
-from .tienda_views import (
+from .tienda_views import (  # noqa: F401
     carrito_actualizar,
     carrito_agregar,
     carrito_quitar,
@@ -64,4 +64,4 @@ from .tienda_views import (
     quienes_somos,
     servicios,
 )
-from .util_views import health, login_view, logout_view
+from .util_views import health, login_view, logout_view  # noqa: F401
