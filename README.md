@@ -153,6 +153,9 @@ La guía completa (atributos, responsabilidades, permisos y transiciones reales)
 | `/mostrador/` | Vitrina, venta en sesión, cliente y cobro inmediato | admin, ventas |
 | `/kanban/` | Tablero de producción | admin, cocina, calidad |
 | `/inventario/` | Stock de insumos y recetas (BOM) | admin, cocina, calidad |
+| `/inventario/nuevo/` | Alta de insumo | admin, cocina |
+| `/inventario/<id>/editar/` | Edición de insumo (stock, mínimo, costo, unidad) | admin, cocina |
+| `/inventario/<id>/eliminar/` | Baja de insumo (POST; bloqueada si tiene receta o movimientos) | admin |
 | `/equipo/` | Guía de roles, alta de equipo y clientes | admin |
 | `/despachos/` | Rutas, evidencia de entrega y retiros | admin, despacho |
 | `/health/` | Sonda de salud (app + base de datos) | Público |
