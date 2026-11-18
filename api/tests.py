@@ -984,3 +984,26 @@ class MostradorTest(BaseDulceArteTest):
         pedido.refresh_from_db()
         self.assertEqual(pedido.estado, "entregado")
         self.assertEqual(pedido.retirado_por, "María Retira")
+
+
+class PrivacidadRecetaTest(BaseDulceArteTest):
+    """La receta solo se muestra a usuarios autenticados."""
+
+    def test_anonimo_no_ve_receta_en_el_html(self):
+        respuesta = self.client.get(
+            reverse("producto_detalle", args=[self.producto.pk])
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotContains(respuesta, "Receta e ingredientes")
+        self.assertNotContains(respuesta, "Harina test")
+
+    def test_cliente_autenticado_si_ve_receta(self):
+        self.client.login(username="cliente_test", password=CLAVE)
+        respuesta = self.client.get(
+            reverse("producto_detalle", args=[self.producto.pk])
+        )
+
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Receta e ingredientes")
+        self.assertContains(respuesta, "Harina test")
