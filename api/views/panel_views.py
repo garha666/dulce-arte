@@ -421,7 +421,7 @@ def insumo_crear(request):
         form = InsumoForm(request.POST)
         if form.is_valid():
             insumo = form.save()
-            messages.success(request, f"Insumo {insumo.nombre} creado.")
+            messages.success(request, f"Insumo «{insumo.nombre}» creado.")
             return redirect("inventario")
     else:
         form = InsumoForm()
@@ -441,7 +441,7 @@ def insumo_editar(request, pk):
         form = InsumoForm(request.POST, instance=insumo)
         if form.is_valid():
             form.save()
-            messages.success(request, f"Insumo {insumo.nombre} actualizado.")
+            messages.success(request, f"Insumo «{insumo.nombre}» actualizado.")
             return redirect("inventario")
     else:
         form = InsumoForm(instance=insumo)
@@ -476,7 +476,7 @@ def insumo_eliminar(request, pk):
 
     nombre = insumo.nombre
     insumo.delete()
-    messages.success(request, f"Insumo {nombre} eliminado.")
+    messages.success(request, f"Insumo «{nombre}» eliminado.")
     return redirect("inventario")
 
 
